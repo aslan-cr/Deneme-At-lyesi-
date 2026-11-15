@@ -1,13 +1,13 @@
 --[[
-	DIZ ÇÖKME DANSI — R6 animasyon oluşturucu
-	-----------------------------------------
+	TIRPANLA SAMAN BİÇME — R6 animasyon oluşturucu
+	----------------------------------------------
 	Nasıl kullanılır:
 	  1. Roblox Studio'da View > Command Bar'ı aç.
 	  2. Bu dosyanın tamamını kopyalayıp Command Bar'a yapıştır, Enter'a bas.
-	  3. ServerStorage > RBX_ANIMSAVES altında "DizCokmeDansi" oluşur.
+	  3. ServerStorage > RBX_ANIMSAVES altında "TirpanBicme" oluşur.
 	  4. Avatar > Rig Builder ile bir R6 rig ekle (adı "Rig" olsun), Animation Editor'ı aç,
-	     rig'i seç, "..." menüsünden "Load" ile DizCokmeDansi'yı yükle.
-	  5. Beğenince "..." > "Publish to Roblox" ile yükle ve çıkan ID'yi DansTusu script'ine yaz.
+	     rig'i seç, "..." menüsünden "Load" ile TirpanBicme'yi yükle.
+	  5. Beğenince "..." > "Publish to Roblox" ile yükle ve çıkan ID'yi TirpanSalla script'ine yaz.
 
 	Pozları değiştirmek için aşağıdaki ADIMLAR tablosunu düzenle (dereceler):
 	  kol/bacak:  ileri (+ öne kaldır, - arkaya), disari (+ yana aç, - içeri / göğse çapraz)
@@ -16,7 +16,7 @@
 ]]
 
 local ServerStorage = game:GetService("ServerStorage")
-local ANIM_ADI = "DizCokmeDansi"
+local ANIM_ADI = "TirpanBicme"
 local RIG_ADI = "Rig"
 
 -- Standart R6 eklem (Motor6D) C0 dönüşleri
@@ -57,45 +57,46 @@ local function kafa(p)
 end
 
 -- Videodaki hareketin adımları (zaman saniye cinsinden)
+-- "stil": bu pozdan bir SONRAKİ poza geçişin yumuşaklığı (Cubic, Linear, Bounce, Elastic, Constant)
 local ADIMLAR = {
-	{ t = 0.0, ad = "Basla",
-		govde = {}, kafa = {} },
-	{ t = 0.4, ad = "Hazirlik",          -- yana dön, sağ kolu geri çek
-		govde = { don = 35, egil = 5 }, kafa = { don = -25 },
-		sagKol = { ileri = -45, disari = 20 }, solKol = { ileri = 40, disari = -20 } },
-	{ t = 0.8, ad = "Inis",
-		govde = { cok = 0.5, egil = 15, don = 15 }, kafa = { don = -10 },
-		sagKol = { ileri = -20, disari = 15 }, solKol = { ileri = 20 },
-		sagBacak = { ileri = 30 }, solBacak = { ileri = -30 } },
-	{ t = 1.05, ad = "DizCok_Yumruk", stil = "Bounce",   -- tek diz yere, sağ yumruk öne
-		govde = { cok = 1.2, egil = 15 }, kafa = { egil = -5 },
-		sagKol = { ileri = 90 }, solKol = { ileri = -25, disari = 15 },
-		sagBacak = { ileri = 65 }, solBacak = { ileri = -65 } },
-	{ t = 1.8, ad = "DizCok_Bekle",
-		govde = { cok = 1.15, egil = 18 }, kafa = { egil = -8 },
-		sagKol = { ileri = 85 }, solKol = { ileri = -25, disari = 15 },
-		sagBacak = { ileri = 65 }, solBacak = { ileri = -65 } },
-	{ t = 2.3, ad = "Kalkis",
-		govde = { cok = 0.6, egil = 25, don = -10 }, kafa = { egil = 5 },
-		sagKol = { ileri = 35 }, solKol = { ileri = 20 },
-		sagBacak = { ileri = 30 }, solBacak = { ileri = -30 } },
-	{ t = 2.7, ad = "Dogrul",
-		govde = { cok = 0.1, egil = 8, don = -20 }, kafa = { don = 10 },
-		sagKol = { ileri = 45, disari = -20 }, solKol = { ileri = 30, disari = -10 } },
-	{ t = 3.0, ad = "KollarGogse",
-		govde = { don = -10 },
-		sagKol = { ileri = 80, disari = -35 }, solKol = { ileri = 80, disari = -35 } },
-	{ t = 3.3, ad = "SagKolYukari",
-		govde = { don = 10 }, kafa = { egil = -10 },
-		sagKol = { ileri = 165, disari = -10 }, solKol = { ileri = 70, disari = -35 } },
-	{ t = 3.6, ad = "SolKolYukari",
-		govde = { don = -10 }, kafa = { egil = -10 },
-		sagKol = { ileri = 70, disari = -35 }, solKol = { ileri = 165, disari = -10 } },
-	{ t = 3.9, ad = "KollarGogse2",
-		sagKol = { ileri = 80, disari = -35 }, solKol = { ileri = 80, disari = -35 } },
-	{ t = 4.4, ad = "Bitis",                -- kameraya dönüp dur
+	{ t = 0.0, ad = "Hazir",
 		govde = {}, kafa = {},
-		sagKol = { disari = 8 }, solKol = { disari = 8 } },
+		sagKol = { ileri = 40 }, solKol = { ileri = 45, disari = -30 } },
+	{ t = 0.35, ad = "Kaldir", stil = "Linear",        -- tırpan sağ omzun üstünde, geriye kaldırılmış
+		govde = { don = 45, egil = -5 }, kafa = { don = -20 },
+		sagKol = { ileri = 150, disari = 25 }, solKol = { ileri = 135, disari = -55 },
+		sagBacak = { ileri = 10 }, solBacak = { ileri = -10 } },
+	{ t = 0.6, ad = "Savur", stil = "Linear",           -- savurma ortası, alçalmaya başlıyor
+		govde = { cok = 0.5, egil = 18, don = 5 },
+		sagKol = { ileri = 80, disari = -10 }, solKol = { ileri = 75, disari = -30 },
+		sagBacak = { ileri = 30 }, solBacak = { ileri = -30 } },
+	{ t = 0.85, ad = "Kes",                             -- tek diz yerde, tırpan sol altta: saman kesildi
+		govde = { cok = 1.2, egil = 25, don = -35 }, kafa = { egil = 10, don = -10 },
+		sagKol = { ileri = 55, disari = -45 }, solKol = { ileri = 50, disari = 10 },
+		sagBacak = { ileri = 65 }, solBacak = { ileri = -65 } },
+	{ t = 1.6, ad = "Bekle",
+		govde = { cok = 1.15, egil = 22, don = -30 }, kafa = { egil = 8, don = -10 },
+		sagKol = { ileri = 55, disari = -40 }, solKol = { ileri = 50, disari = 10 },
+		sagBacak = { ileri = 65 }, solBacak = { ileri = -65 } },
+	{ t = 2.1, ad = "Kalk",
+		govde = { cok = 0.6, egil = 25, don = -10 }, kafa = { egil = 5 },
+		sagKol = { ileri = 50, disari = -15 }, solKol = { ileri = 50, disari = -10 },
+		sagBacak = { ileri = 30 }, solBacak = { ileri = -30 } },
+	{ t = 2.5, ad = "Dogrul",
+		govde = { cok = 0.1, egil = 5, don = 10 },
+		sagKol = { ileri = 70, disari = 5 }, solKol = { ileri = 75, disari = -40 } },
+	{ t = 2.85, ad = "OmzaAl",                          -- tırpanı başın sağ yanına kaldır
+		govde = { don = 15 }, kafa = { egil = -5, don = 5 },
+		sagKol = { ileri = 155, disari = 10 }, solKol = { ileri = 145, disari = -45 } },
+	{ t = 3.3, ad = "Omuzda",                           -- tırpan sağ omuzda dinleniyor
+		govde = { don = 10 },
+		sagKol = { ileri = 85, disari = 20 }, solKol = { ileri = 90, disari = -55 } },
+	{ t = 3.9, ad = "Omuzda2",
+		govde = { don = 10 },
+		sagKol = { ileri = 85, disari = 20 }, solKol = { ileri = 90, disari = -55 } },
+	{ t = 4.3, ad = "Bitis",                            -- başlangıç duruşuna dön (tekrar biçmeye hazır)
+		govde = {}, kafa = {},
+		sagKol = { ileri = 40 }, solKol = { ileri = 45, disari = -30 } },
 }
 
 -- KeyframeSequence oluştur
