@@ -12,9 +12,8 @@
 	  Oradan çıkınca:                          oyuncu:SetAttribute("SamanAlaninda", false)
 	  (Bu satırlar sunucu script'inde de, LocalScript'te de çalışır.)
 
-	Tırpan samana değdiği an (animasyondaki "Kes" anı) ReplicatedStorage içindeki
-	"SamanKesildi" adlı BindableEvent tetiklenir. Samanı yok etmek / puan vermek için:
-	  game.ReplicatedStorage:WaitForChild("SamanKesildi").Event:Connect(function() ... end)
+	Tırpan samana değdiği an (animasyondaki "Kes" anı) sunucuya haber verilir,
+	ServerScriptService içindeki SamanBicme script'i değdiği samanları yok eder.
 ]]
 
 local ANIM_ID = "rbxassetid://0" -- <-- buraya kendi animasyon ID'ni yaz
@@ -28,12 +27,7 @@ local oyuncu = Players.LocalPlayer
 local anim = Instance.new("Animation")
 anim.AnimationId = ANIM_ID
 
-local samanKesildi = ReplicatedStorage:FindFirstChild("SamanKesildi")
-if not samanKesildi then
-	samanKesildi = Instance.new("BindableEvent")
-	samanKesildi.Name = "SamanKesildi"
-	samanKesildi.Parent = ReplicatedStorage
-end
+local samanKes = ReplicatedStorage:WaitForChild("SamanKes") -- SamanBicme (sunucu) script'i oluşturur
 
 local track
 local mesgul = false
@@ -44,7 +38,7 @@ local function karakterHazir(karakter)
 	track = animator:LoadAnimation(anim)
 	track.Priority = Enum.AnimationPriority.Action
 	track.KeyframeReached:Connect(function(ad)
-		if ad == "Kes" then samanKesildi:Fire() end
+		if ad == "Kes" then samanKes:FireServer() end
 	end)
 	mesgul = false
 end
