@@ -1,39 +1,77 @@
 --[[
-	TIRPAN SALLA — tırpanı eline alıp tıklayınca saman biçme animasyonu oynar.
-	Bu bir LocalScript'tir: tırpan Tool'unun İÇİNE koy (StarterPack > Tirpan > bu script).
-	Tool'un içinde "Handle" adlı bir parça olmalı (tırpan modeli).
+	TIRPAN SALLA — samanların olduğu yerde ekrana dokununca / sol tıklayınca
+	saman biçme animasyonunu oynatır.
+	  • Telefon / tablet: ekrana dokun (kaydırma ve joystick sayılmaz)
+	  • Bilgisayar: sol tık
+
+	Bu bir LocalScript'tir: StarterPlayer > StarterPlayerScripts içine koy.
 	Animasyonu "Publish to Roblox" ile yükledikten sonra çıkan sayıyı ANIM_ID'ye yaz.
+
+	SENİN BAĞLAYACAĞIN YER:
+	  Oyuncu samanların olduğu yere girince:   oyuncu:SetAttribute("SamanAlaninda", true)
+	  Oradan çıkınca:                          oyuncu:SetAttribute("SamanAlaninda", false)
+	  (Bu satırlar sunucu script'inde de, LocalScript'te de çalışır.)
+
+	Tırpan samana değdiği an (animasyondaki "Kes" anı) ReplicatedStorage içindeki
+	"SamanKesildi" adlı BindableEvent tetiklenir. Samanı yok etmek / puan vermek için:
+	  game.ReplicatedStorage:WaitForChild("SamanKesildi").Event:Connect(function() ... end)
 ]]
 
 local ANIM_ID = "rbxassetid://0" -- <-- buraya kendi animasyon ID'ni yaz
-local BEKLEME = 0.3              -- animasyon bittikten sonra yeniden sallamadan önce beklenecek süre (sn)
+local BEKLEME = 0.3              -- bir biçme bittikten sonra yenisine kadar beklenecek süre (sn)
 
-local tool = script.Parent
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local oyuncu = Players.LocalPlayer
 local anim = Instance.new("Animation")
 anim.AnimationId = ANIM_ID
+
+local samanKesildi = ReplicatedStorage:FindFirstChild("SamanKesildi")
+if not samanKesildi then
+	samanKesildi = Instance.new("BindableEvent")
+	samanKesildi.Name = "SamanKesildi"
+	samanKesildi.Parent = ReplicatedStorage
+end
 
 local track
 local mesgul = false
 
-tool.Equipped:Connect(function()
-	local karakter = tool.Parent
-	local humanoid = karakter:FindFirstChildOfClass("Humanoid")
-	if not humanoid then return end
-	local animator = humanoid:FindFirstChildOfClass("Animator") or humanoid:WaitForChild("Animator")
+local function karakterHazir(karakter)
+	local humanoid = karakter:WaitForChild("Humanoid")
+	local animator = humanoid:WaitForChild("Animator")
 	track = animator:LoadAnimation(anim)
 	track.Priority = Enum.AnimationPriority.Action
-end)
-
-tool.Unequipped:Connect(function()
-	if track then track:Stop(0.1) end
+	track.KeyframeReached:Connect(function(ad)
+		if ad == "Kes" then samanKesildi:Fire() end
+	end)
 	mesgul = false
-end)
+end
 
-tool.Activated:Connect(function()
+if oyuncu.Character then task.spawn(karakterHazir, oyuncu.Character) end
+oyuncu.CharacterAdded:Connect(karakterHazir)
+
+local function bic()
 	if mesgul or not track then return end
+	if oyuncu:GetAttribute("SamanAlaninda") ~= true then return end
 	mesgul = true
 	track:Play(0.1)
 	track.Stopped:Wait()
 	task.wait(BEKLEME)
 	mesgul = false
+end
+
+-- Bilgisayar: sol tık
+UserInputService.InputBegan:Connect(function(girdi, oyunIsledi)
+	if oyunIsledi then return end -- butonlara / menülere tıklama sayılmaz
+	if girdi.UserInputType == Enum.UserInputType.MouseButton1 then
+		bic()
+	end
+end)
+
+-- Telefon / tablet: ekrana dokunma (kaydırma değil, kısa dokunuş)
+UserInputService.TouchTap:Connect(function(_, oyunIsledi)
+	if oyunIsledi then return end -- joystick, zıplama tuşu, menüler sayılmaz
+	bic()
 end)

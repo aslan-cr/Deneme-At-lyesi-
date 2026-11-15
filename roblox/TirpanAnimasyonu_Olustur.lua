@@ -7,7 +7,7 @@
 	  3. ServerStorage > RBX_ANIMSAVES altında "TirpanBicme" oluşur.
 	  4. Avatar > Rig Builder ile bir R6 rig ekle (adı "Rig" olsun), Animation Editor'ı aç,
 	     rig'i seç, "..." menüsünden "Load" ile TirpanBicme'yi yükle.
-	  5. Beğenince "..." > "Publish to Roblox" ile yükle ve çıkan ID'yi TirpanSalla script'ine yaz.
+	  5. Beğenince "..." > "Publish to Roblox" ile yükle ve çıkan ID'yi TirpanSalla script'ine (StarterPlayerScripts) yaz.
 
 	Pozları değiştirmek için aşağıdaki ADIMLAR tablosunu düzenle (dereceler):
 	  kol/bacak:  ileri (+ öne kaldır, - arkaya), disari (+ yana aç, - içeri / göğse çapraz)
