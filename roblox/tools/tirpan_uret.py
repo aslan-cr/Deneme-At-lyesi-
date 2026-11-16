@@ -26,6 +26,7 @@ SAP_UCU = np.array([0.5, -1.5, -3.4])     # sapın uzak ucu = bıçağın kökü
 SAP_ARKA = np.array([0.5, -1.5, 0.55])    # sapın elin arkasında kalan ucu
 BICAK = np.array([0, 2.24, 0])            # bıçak kökünden ucuna (kolun +Y yönü)
 # Oyunda tırpan eldeyken beklerken ölçülen sol kol dönüşü (Torso'ya göre)
+KOL_BEKLEME_YER = {"R": np.array([1.4000, 0.7351, 0.2628]), "L": np.array([0.6387, 1.4482, -0.0631])}  # kol merkezleri
 SOL_BEKLEME = np.array([[0.5887, -0.6955, 0.4120], [-0.7696, -0.3263, 0.5489], [-0.2473, -0.6402, -0.7273]])
 YER = -3.0               # kök parçaya göre zemin yüksekliği
 
@@ -112,10 +113,17 @@ def govde(p):
 def bacak(p, Rt, pt, taraf):
     """Ayak yerde kalacak şekilde bacak (kök uzayında dönüş ve merkez)."""
     kalca = pt + Rt @ KALCA[taraf]
-    h = min(max(kalca[1] - YER, 0.35), 2.0)
-    d = math.sqrt(max(4 - h * h, 0))
+    # Bacak 1 stud kalınlığında bir kutu: yatık dururken alt köşesi de yere girmesin diye
+    # eğim açısı (aci) "2*cos + 0.5*sin = kalça yüksekliği" denkleminden bulunur.
+    h = kalca[1] - YER
+    a0, a1 = 0.0, math.radians(85)
+    for _ in range(40):
+        aci = (a0 + a1) / 2
+        if 2 * math.cos(aci) + 0.5 * math.sin(aci) > h: a0 = aci
+        else: a1 = aci
+    aci = 0.0 if h >= 2 else (a0 + a1) / 2
     yon = norm(np.array([-0.25, 0, -1.0])) if taraf == "L" else norm(np.array([0.3, 0, 1.0]))  # sol ayak önde
-    alt = np.array([kalca[0], YER, kalca[2]]) + yon * d
+    alt = np.array([kalca[0], kalca[1] - 2 * math.cos(aci), kalca[2]]) + yon * 2 * math.sin(aci)
     u = norm(kalca - alt)
     if taraf == "L" and p["diz"] > 0:   # öndeki bacak: diz çökerken dik durur (diz yukarıda görünür)
         k = p["diz"]
@@ -126,7 +134,11 @@ def bacak(p, Rt, pt, taraf):
     bakis = Ry(-math.radians(p["don"]) * 0.5) @ np.array([0, 0, -1.0])
     z = -bakis; z = norm(z - (z @ u) * u)
     R = np.column_stack([np.cross(u, z), u, z])
-    return R, alt + u * 1.0
+    merkez = alt + u * 1.0
+    # son güvence: kutunun en alt köşesi hâlâ yerin altındaysa bacağı o kadar yukarı al
+    en_alt = merkez[1] - (0.5 * abs(R[1, 0]) + 1.0 * abs(R[1, 1]) + 0.5 * abs(R[1, 2]))
+    if en_alt < YER: merkez = merkez + np.array([0, YER - en_alt, 0])
+    return R, merkez
 
 def kollar(p, Rt):
     """Sağ ve sol kolun gövde uzayındaki dönüşleri."""
@@ -134,6 +146,10 @@ def kollar(p, Rt):
     RL = Rx(math.radians(p["sol"])) @ Rz(-math.radians(p["solyan"]))
     RL = rodrigues(p["dinlen"] * donme_vektoru(SOL_BEKLEME @ RL.T)) @ RL     # beklerken oyundaki sol kol duruşu
     return Rt.T @ Rw, RL
+
+# Bekleme duruşunda kollar omuzdan biraz kaymış durur (oyunda ölçüldü); baş/sonda aynı kayma eklenir
+KAYMA = {"R": KOL_BEKLEME_YER["R"] - (OMUZ["R"] + Rx(math.radians(198)) @ KOL_MERKEZ["R"]),
+         "L": KOL_BEKLEME_YER["L"] - (OMUZ["L"] + SOL_BEKLEME @ KOL_MERKEZ["L"])}
 
 BICAK_EN = 0.4   # bıçağın sap doğrultusundaki yarı genişliği
 def bicak_alt(p, Rt, pt):
@@ -152,10 +168,10 @@ def yere_oturt(p, Rt, pt):
         else: ust = orta
     p["kdon"] += p["yerde"] * ((alt + ust) / 2 - p["kdon"])
 
-def tirpan(RR):
+def tirpan(RR, kayma=0):
     """Sapın arka ucu, bıçak kökü ve bıçak ucu (gövde uzayında)."""
-    arka = OMUZ["R"] + RR @ SAP_ARKA
-    kok = OMUZ["R"] + RR @ SAP_UCU
+    arka = OMUZ["R"] + RR @ SAP_ARKA + kayma
+    kok = OMUZ["R"] + RR @ SAP_UCU + kayma
     return arka, kok, kok + RR @ BICAK
 
 def kutuya_uzaklik(q, merkez, yari):
@@ -183,7 +199,8 @@ def uret():
         Rt, pt = govde(p)
         yere_oturt(p, Rt, pt)
         RR, RL = kollar(p, Rt)
-        arka, kok, uc = tirpan(RR)
+        kR, kL = KAYMA["R"] * p["dinlen"], KAYMA["L"] * p["dinlen"]
+        arka, kok, uc = tirpan(RR, kR)
         dunya = lambda q: pt + Rt @ q
         # tırpan gövdeye / kafaya ne kadar yaklaşıyor, yere giriyor mu
         ornek = [arka + (kok - arka) * k for k in np.linspace(0.25, 1, 7)] + [kok + (uc - kok) * k for k in (0.33, 0.66, 1.0)]
@@ -197,7 +214,7 @@ def uret():
                 t, anahtar_t[t], bicak_alt(p, Rt, pt), yatik, math.degrees(math.atan2(b[0], -b[2])), yakin))
         Rh, ph = kafa(p, Rt, pt, dunya(uc))
         par = {"Torso": (Rt, pt), "Head": (Rh, ph),
-               "Right Arm": (RR, OMUZ["R"] + RR @ KOL_MERKEZ["R"]), "Left Arm": (RL, OMUZ["L"] + RL @ KOL_MERKEZ["L"])}
+               "Right Arm": (RR, OMUZ["R"] + RR @ KOL_MERKEZ["R"] + kR), "Left Arm": (RL, OMUZ["L"] + RL @ KOL_MERKEZ["L"] + kL)}
         for taraf, ad in (("R", "Right Leg"), ("L", "Left Leg")):
             Rb, pb = bacak(p, Rt, pt, taraf)
             par[ad] = (Rt.T @ Rb, Rt.T @ (pb - pt))          # gövde uzayına çevir
