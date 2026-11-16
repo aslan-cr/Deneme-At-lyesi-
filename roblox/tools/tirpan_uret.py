@@ -9,8 +9,10 @@ gideceği yer), sonra her kare için:
 Çıktı:  roblox/TirpanAnimasyonu_Olustur.lua  ve (istenirse) önizleme için JSON.
 
 Kullanım:  python3 roblox/tools/tirpan_uret.py [onizleme.json]
-Varsayım: tırpan sağ ele standart Tool tutuşuyla bağlı; sap, sağ kolun yerel -Z
-yönünde (kola dik) uzanır.
+Tırpanın yeri oyundaki Tool'dan ölçüldü ("normal tırpan", Grip = CFrame(0,-1.4,0) * X'te -15°,
+standart RightGrip): sap sağ kolun yerel X ekseni boyunca (yana) uzanır ve avucun ~1,4 stud
+önünde durur; bıçak sapın +X ucundan, kolun uzandığı yöne doğru çıkar. Yani tırpan kolun
+devamı gibi savrulur. Animasyon oyundaki "toolnone" duruşuyla (sağ kol öne 90°) başlar ve biter.
 """
 import json, math, os, sys
 import numpy as np
@@ -18,8 +20,14 @@ import numpy as np
 FPS = 30
 SURE = 1.6
 KES_T = 0.5
-LF, LB = 3.2, 2.4        # sağ elden bıçak ucuna / sapın arka ucuna uzunluk
-TUTUS = -1.0             # sol elin sap üzerindeki yeri (sağ ele göre): eller yan yana
+# --- Tırpanın sağ kol uzayındaki yeri (kol parçasının merkezine göre; Studio'da ölçüldü) ---
+SAP_Y, SAP_Z = -0.64, -1.35               # sap ekseninin geçtiği yer; sap kolun X ekseni boyunca uzanır
+SAP_YARI = 1.8                            # sapın yarı uzunluğu (Handle 3.6 stud)
+BICAK_X = 1.55                            # bıçağın sapa bağlandığı yer (sap üzerinde, +X ucu)
+BICAK_YON = np.array([0, -0.966, -0.259]) # bıçağın uzandığı yön (kol uzayında; ele doğru, biraz öne)
+BICAK_BOY = 3.0                           # bıçak kökünden ucuna
+SOL_EL = np.array([0, -0.9, 1.0])         # sol elin duracağı yer: sağ elin hemen yanında (kol uzayında)
+X_DINLEN = np.array([math.pi / 2, 0, 0, 0, 0, 0.0])  # "toolnone": sağ kol öne 90°, sol kol serbest
 YER = -3.0               # kök parçaya göre zemin yüksekliği
 
 def Rx(a): c, s = math.cos(a), math.sin(a); return np.array([[1, 0, 0], [0, c, -s], [0, s, c]])
@@ -47,21 +55,20 @@ def quat(R):
 # ---------------- Hareket eğrileri ----------------
 # don: gövde sağa dönüş (+), egil: öne eğilme, yan: sola yatma, cok: kalça alçalması,
 # geri: kalçanın geriye kayması, diz: tek diz çökme (0-1),
-# yon: tırpan sapının baktığı yön (0 = ileri, + = sağ, 180 = arka), yuk: sap ucunun yerden yüksekliği,
-# duz: bıçağın yere paralel olma isteği (0-1)
+# yon: bıçak ucunun (sağ omuzdan bakınca) yönü (0 = ileri, + = sağ, 180 = arka), yuk: bıçağın yerden yüksekliği,
+# duz: bıçağın yere yatık olma isteği (0-1), dinlen: oyundaki "toolnone" duruşuna yakınlık (1 = tam o duruş)
 ANAHTAR = [
-    dict(t=0.00, ad="Bel",    dur=1, don=28,  egil=8,  yan=0,  cok=0.10, geri=0.0,  diz=0,   yon=78,  yuk=1.1,  duz=0.2),
-    dict(t=0.25, ad="Geri",   dur=1, don=58,  egil=4,  yan=-4, cok=0.18, geri=0.2,  diz=0,   yon=150, yuk=2.0,  duz=0.3),
-    dict(t=0.42, ad="Savur",  dur=0, don=15,  egil=28, yan=4,  cok=0.75, geri=0.0,  diz=0.7, yon=88,  yuk=0.6,  duz=1),
-    dict(t=0.50, ad="Kes",    dur=0, don=-25, egil=38, yan=6,  cok=1.00, geri=-0.1, diz=1,   yon=42,  yuk=0.35, duz=1),
-    dict(t=0.64, ad="",       dur=0, don=-75, egil=41, yan=8,  cok=1.08, geri=-0.1, diz=1,   yon=-15, yuk=0.35, duz=1),
-    dict(t=0.80, ad="Bekle",  dur=1, don=-68, egil=37, yan=6,  cok=1.05, geri=-0.1, diz=1,   yon=-8,  yuk=0.4,  duz=1),
-    dict(t=1.00, ad="",       dur=1, don=-65, egil=35, yan=5,  cok=1.02, geri=-0.1, diz=1,   yon=-5,  yuk=0.45, duz=1),
-    dict(t=1.30, ad="Kalk",   dur=0, don=-12, egil=18, yan=0,  cok=0.35, geri=0.0,  diz=0.2, yon=50,  yuk=1.0,  duz=0.3),
-    dict(t=1.60, ad="Bitis",  dur=1, don=28,  egil=8,  yan=0,  cok=0.10, geri=0.0,  diz=0,   yon=78,  yuk=1.1,  duz=0.2),
+    dict(t=0.00, ad="Bel",    dur=1, don=0,   egil=0,  yan=0,  cok=0.00, geri=0.0,  diz=0,   yon=20,  yuk=3.0,  duz=0,   dinlen=1),
+    dict(t=0.25, ad="Geri",   dur=1, don=45,  egil=6,  yan=-4, cok=0.20, geri=0.2,  diz=0,   yon=125, yuk=1.7,  duz=0.6, dinlen=0),
+    dict(t=0.42, ad="Savur",  dur=0, don=15,  egil=28, yan=4,  cok=0.75, geri=0.0,  diz=0.7, yon=80,  yuk=0.45, duz=1,   dinlen=0),
+    dict(t=0.50, ad="Kes",    dur=0, don=-15, egil=38, yan=6,  cok=1.00, geri=-0.1, diz=1,   yon=30,  yuk=0.3,  duz=1,   dinlen=0),
+    dict(t=0.64, ad="",       dur=0, don=-50, egil=41, yan=8,  cok=1.08, geri=-0.1, diz=1,   yon=-45, yuk=0.3,  duz=1,   dinlen=0),
+    dict(t=0.80, ad="Bekle",  dur=1, don=-45, egil=37, yan=6,  cok=1.05, geri=-0.1, diz=1,   yon=-40, yuk=0.35, duz=1,   dinlen=0),
+    dict(t=1.00, ad="",       dur=1, don=-42, egil=35, yan=5,  cok=1.02, geri=-0.1, diz=1,   yon=-37, yuk=0.4,  duz=1,   dinlen=0),
+    dict(t=1.30, ad="Kalk",   dur=0, don=-10, egil=14, yan=0,  cok=0.30, geri=0.0,  diz=0.2, yon=5,   yuk=1.8,  duz=0.2, dinlen=0.5),
+    dict(t=1.60, ad="Bitis",  dur=1, don=0,   egil=0,  yan=0,  cok=0.00, geri=0.0,  diz=0,   yon=20,  yuk=3.0,  duz=0,   dinlen=1),
 ]
-ALANLAR = ["don", "egil", "yan", "cok", "geri", "diz", "duz", "yon", "yuk"]
-BICAK_ACI = 0.15         # bıçak düzleminin sapa göre eğimi (radyan)
+ALANLAR = ["don", "egil", "yan", "cok", "geri", "diz", "duz", "dinlen", "yon", "yuk"]
 
 def vektor(k): return np.array([k[a] for a in ALANLAR], dtype=float)
 P = [vektor(k) for k in ANAHTAR]
@@ -77,6 +84,7 @@ def egri(t):
     v = h00 * P[i] + h10 * h * M[i] + h01 * P[i + 1] + h11 * h * M[i + 1]
     d = dict(zip(ALANLAR, v))
     d["diz"] = min(max(d["diz"], 0), 1); d["duz"] = min(max(d["duz"], 0), 1)
+    d["dinlen"] = min(max(d["dinlen"], 0), 1)
     return d
 
 # ---------------- İskelet ----------------
@@ -109,38 +117,46 @@ def bacak(p, Rt, pt, taraf):
     R = np.column_stack([np.cross(u, z), u, z])
     return R, alt + u * 1.0
 
-def kol_durum(Rt, pt, rR, rL):
-    RR, RL = rodrigues(rR), rodrigues(rL)
+def kol_noktasi(RR, q):
+    """Sağ kol uzayındaki (kol merkezine göre) bir noktayı gövde uzayına çevirir."""
+    return OMUZ["R"] + RR @ (KOL_MERKEZ["R"] + q)
+
+def kol_durum(x):
+    RR, RL = rodrigues(x[:3]), rodrigues(x[3:])
     elR = OMUZ["R"] + RR @ EL["R"]; elL = OMUZ["L"] + RL @ EL["L"]
-    s = RR @ np.array([0, 0, -1.0])
-    return RR, RL, elR, elL, s
+    kok = kol_noktasi(RR, np.array([BICAK_X, SAP_Y, SAP_Z]))      # bıçağın sapa bağlandığı yer
+    uc = kok + RR @ BICAK_YON * BICAK_BOY                          # bıçağın ucu
+    return RR, RL, elR, elL, kok, uc
+
+UC_UZAKLIK = float(np.linalg.norm(KOL_MERKEZ["R"] + np.array([BICAK_X, SAP_Y, SAP_Z]) + BICAK_YON * BICAK_BOY))
 
 def kutuda(pt, yari, pay):
     d = np.maximum(yari + pay - np.abs(pt), 0)
     return float(np.min(d)) if np.all(d > 0) else 0.0
 
 def maliyet(x, Rt, pt, p, onceki):
-    RR, RL, elR, elL, s = kol_durum(Rt, pt, x[:3], x[3:])
+    RR, RL, elR, elL, kok, uc = kol_durum(x)
+    w = 1 - p["dinlen"]
     uc_g = Rt.T @ (p["uc"] - pt)                         # hedef, gövde uzayında
-    uc = elR + s * LF
-    e = 1.0 * np.sum((uc - uc_g) ** 2)
-    # sol el sapın üstünde olsun
-    lam = float(np.clip((elL - elR) @ s, TUTUS - 0.1, TUTUS + 0.1))
-    e += 14.0 * np.sum((elL - (elR + s * lam)) ** 2)
-    e += 0.4 * ((RL @ np.array([0, 1.0, 0])) @ s) ** 2   # sol kol sapa dik
-    # bıçak yere paralel
+    e = w * 1.0 * np.sum((uc - uc_g) ** 2)
+    # sol el sağ elin yanında dursun
+    e += w * 14.0 * np.sum((elL - kol_noktasi(RR, SOL_EL)) ** 2)
+    # bıçak yere yatık: sap dik (bıçaklı ucu aşağıda), bıçak kökü de istenen yükseklikte
     if p["duz"] > 0:
-        n = Rt @ RR @ norm(np.array([0, math.cos(BICAK_ACI), math.sin(BICAK_ACI)]))
-        e += 5.0 * p["duz"] * (1 - n[1])
-    # çarpışmalar: eller ve sap gövdenin / kafanın içinden geçmesin
+        asagi = -(Rt @ RR @ np.array([1.0, 0, 0]))[1]
+        e += w * 5.0 * p["duz"] * (1 - asagi)
+        e += w * 3.0 * p["duz"] * ((pt + Rt @ kok)[1] - (YER + p["yuk"])) ** 2
+    # çarpışmalar: eller, sap ve bıçak gövdenin / kafanın içinden geçmesin, yere girmesin
     for el in (elR, elL):
-        e += 30 * kutuda(el, np.array([1.0, 1.0, 0.5]), 0.35) ** 2
-    for lm in np.linspace(-LB, LF, 9):
-        q = elR + s * lm
-        e += 12 * kutuda(q, np.array([1.0, 1.0, 0.5]), 0.2) ** 2
-        e += 12 * max(0.85 - np.linalg.norm(q - np.array([0, 1.6, 0])), 0) ** 2
+        e += 30 * w * kutuda(el, np.array([1.0, 1.0, 0.5]), 0.35) ** 2
+    noktalar = [kol_noktasi(RR, np.array([lm, SAP_Y, SAP_Z])) for lm in np.linspace(-SAP_YARI, SAP_YARI, 7)]
+    noktalar += [kok + (uc - kok) * k for k in (0.33, 0.66, 1.0)]
+    for q in noktalar:
+        e += 12 * w * kutuda(q, np.array([1.0, 1.0, 0.5]), 0.2) ** 2
+        e += 12 * w * max(0.85 - np.linalg.norm(q - np.array([0, 1.6, 0])), 0) ** 2
         yer = (pt + Rt @ q)[1] - (YER + 0.1)
-        e += 6 * min(yer, 0) ** 2                         # sap yere girmesin
+        e += 6 * w * min(yer, 0) ** 2
+    e += 40.0 * p["dinlen"] * np.sum((x - X_DINLEN) ** 2)   # baş/son: oyundaki duruşa yaklaş
     if onceki is not None:
         e += 0.06 * np.sum((x - onceki) ** 2)
     return e
@@ -183,44 +199,58 @@ def kafa(p, Rt, pt, uc_dunya):
     bas = pt + Rt @ np.array([0, 1.5, 0])
     hedef = norm(0.45 * np.array([0, -0.15, -1.0]) + 0.55 * norm(uc_dunya - bas))
     v = Rt.T @ hedef
-    yaw = float(np.clip(math.atan2(-v[0], -v[2]), -1.2, 1.2))
-    pitch = float(np.clip(math.asin(np.clip(v[1], -1, 1)), -0.6, 0.5))
+    w = 1 - p["dinlen"]
+    yaw = w * float(np.clip(math.atan2(-v[0], -v[2]), -1.2, 1.2))
+    pitch = w * float(np.clip(math.asin(np.clip(v[1], -1, 1)), -0.6, 0.5))
     R = Ry(yaw) @ Rx(pitch)
     return R, np.array([0, 1.0, 0]) + R @ np.array([0, 0.5, 0])
+
+def hazirla(t):
+    p = egri(t)
+    Rt, pt = govde(p)
+    # bıçak ucunun hedefi: sağ omuzdan, istenen yöne, istenen yükseklikte (her zaman erişilebilir)
+    om = pt + Rt @ OMUZ["R"]
+    dy = float(np.clip(YER + p["yuk"] - om[1], -UC_UZAKLIK + 0.2, UC_UZAKLIK - 0.2))
+    yat = math.sqrt(UC_UZAKLIK ** 2 - dy * dy)
+    a = math.radians(p["yon"])
+    p["uc"] = om + np.array([math.sin(a) * yat, dy, -math.cos(a) * yat])
+    return p, Rt, pt
 
 def uret():
     rng = np.random.default_rng(7)
     n = int(round(SURE * FPS))
     zamanlar = [i / FPS for i in range(n + 1)]
     zamanlar = sorted(set(round(t, 4) for t in zamanlar + [KES_T, SURE]))
-    # Döngü tutarlılığı için: önce t=0 çöz, sonra ileri doğru sıcak başlat
-    kareler, x = [], None
-    hata = []
-    for t in zamanlar:
-        p = egri(t)
-        Rt, pt = govde(p)
-        # sap ucunun hedefi: sağ omuzdan, istenen yöne, istenen yükseklikte (her zaman erişilebilir)
-        om = pt + Rt @ OMUZ["R"]
-        r_uc = math.sqrt(0.25 + 2.25 + LF * LF)
-        dy = float(np.clip(YER + p["yuk"] - om[1], -r_uc + 0.2, r_uc - 0.2))
-        yat = math.sqrt(r_uc * r_uc - dy * dy)
-        a = math.radians(p["yon"])
-        p["uc"] = om + np.array([math.sin(a) * yat, dy, -math.cos(a) * yat])
-        x, fx = coz(Rt, pt, p, x, rng)
-        RR, RL, elR, elL, s = kol_durum(Rt, pt, x[:3], x[3:])
-        lam = float(np.clip((elL - elR) @ s, TUTUS - 0.1, TUTUS + 0.1))
-        hata.append(float(np.linalg.norm(elL - (elR + s * lam))))
-        if abs(t - KES_T) < 1e-6 or abs(t - 0.8) < 0.01:
-            nn = Rt @ RR @ norm(np.array([0, math.cos(BICAK_ACI), math.sin(BICAK_ACI)]))
-            print("t=%.2f bıçak düzlüğü %.2f, uç hatası %.2f" % (t, nn[1], np.linalg.norm(pt + Rt @ (elR + s * LF) - p["uc"])))
-        Rh, ph = kafa(p, Rt, pt, pt + Rt @ (elR + s * LF))
+    # Önce "Kes" karesini baştan çöz, sonra oradan geriye ve ileriye doğru sıcak başlat
+    orta = zamanlar.index(round(KES_T, 4))
+    cozum = {}
+    p, Rt, pt = hazirla(zamanlar[orta])
+    cozum[orta], _ = coz(Rt, pt, p, None, rng)
+    for sira in (range(orta + 1, len(zamanlar)), range(orta - 1, -1, -1)):
+        x = cozum[orta]
+        for i in sira:
+            p, Rt, pt = hazirla(zamanlar[i])
+            x = X_DINLEN.copy() if p["dinlen"] > 0.999 else coz(Rt, pt, p, x, rng)[0]
+            cozum[i] = x
+    kareler, hata = [], []
+    for i, t in enumerate(zamanlar):
+        p, Rt, pt = hazirla(t)
+        x = cozum[i]
+        RR, RL, elR, elL, kok, uc = kol_durum(x)
+        if p["dinlen"] < 0.05:
+            hata.append(float(np.linalg.norm(elL - kol_noktasi(RR, SOL_EL))))
+        if abs(t - KES_T) < 1e-6 or abs(t - 0.8) < 0.01 or abs(t - 0.2667) < 0.01:
+            asagi = -(Rt @ RR @ np.array([1.0, 0, 0]))[1]
+            print("t=%.2f bıçak yatıklığı %.2f (1 = tam yatık), bıçak kökü yerden %.2f, ucu yerden %.2f, uç hatası %.2f" % (
+                t, asagi, (pt + Rt @ kok)[1] - YER, (pt + Rt @ uc)[1] - YER, np.linalg.norm(pt + Rt @ uc - p["uc"])))
+        Rh, ph = kafa(p, Rt, pt, pt + Rt @ uc)
         par = {"Torso": (Rt, pt), "Head": (Rh, ph),
                "Right Arm": (RR, OMUZ["R"] + RR @ KOL_MERKEZ["R"]), "Left Arm": (RL, OMUZ["L"] + RL @ KOL_MERKEZ["L"])}
         for taraf, ad in (("R", "Right Leg"), ("L", "Left Leg")):
             Rb, pb = bacak(p, Rt, pt, taraf)
             par[ad] = (Rt.T @ Rb, Rt.T @ (pb - pt))          # gövde uzayına çevir
         kareler.append((t, par))
-    print("sol el - sap arası en büyük boşluk: %.3f stud (ortalama %.3f)" % (max(hata), sum(hata) / len(hata)))
+    print("sol el - hedef arası en büyük boşluk: %.3f stud (ortalama %.3f)" % (max(hata), sum(hata) / len(hata)))
     return kareler
 
 # ---------------- Roblox eklem uzayına çevirme ----------------
@@ -251,10 +281,11 @@ LUA_BAS = '''--[[
 	     rig'i seç, "..." menüsünden "Load" ile TirpanBicme'yi yükle.
 	  5. "..." > "Publish to Roblox" ile yükle ve çıkan ID'yi TirpanSalla script'ine yaz.
 
-	Hareket: tırpan sağ yanda, bel hizasında iki elle tutulur > geriye çekilir > belden eğilip tek diz
-	üstüne çökerek sağdan sola savrulur ("Kes" anı) > kalkıp tırpan yeniden sağ yana, bele götürülür.
-	İki el sapı aynı yerden, yan yana tutar.
-	Varsayım: tırpan sağ ele standart Tool tutuşuyla bağlı (sap, kola dik olarak öne uzanır).
+	Hareket: oyundaki tırpan tutuşundan (sağ kol önde) başlar > tırpan sağ geriye çekilir > belden eğilip
+	tek diz üstüne çökerek sağdan sola savrulur ("Kes" anı) > kalkıp baştaki tutuşa döner.
+	Sol el, sağ elin hemen yanında durur.
+	Tırpanın eldeki yeri oyundaki "normal tırpan" Tool'undan ölçüldü (Grip değiştirilmedi): sap kola dik,
+	yana doğru uzanır; bıçak kolun uzandığı yöne bakar.
 	Pozlar hesapla üretildiği için burada elle düzenlenmez; hareketi değiştirmek için üreticideki
 	ANAHTAR tablosu düzenlenip dosya yeniden üretilir.
 ]]
@@ -341,7 +372,7 @@ def main():
         f.write(LUA_BAS + "\n".join(satirlar) + "\n" + LUA_SON)
     print("Lua yazıldı: %d kare" % len(kareler))
     if len(sys.argv) > 1:
-        veri = {"sure": SURE, "kes": KES_T, "lf": LF, "lb": LB, "bicakAci": BICAK_ACI,
+        veri = {"sure": SURE, "kes": KES_T, "sap": [SAP_Y, SAP_Z, SAP_YARI], "bicak": [BICAK_X, BICAK_BOY] + list(BICAK_YON),
                 "adimlar": [[k["t"], k["ad"]] for k in ANAHTAR if k["ad"]],
                 "kareler": [[round(t, 4)] + [round(float(v), 4) for ad in SIRA for v in list(par[ad][1]) + list(quat(par[ad][0]))] for t, par in kareler]}
         with open(sys.argv[1], "w", encoding="utf-8") as f: json.dump(veri, f, separators=(",", ":"))
