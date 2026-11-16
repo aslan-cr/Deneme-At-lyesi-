@@ -25,6 +25,8 @@ KES_T = 0.5
 SAP_UCU = np.array([0.5, -1.5, -3.4])     # sapın uzak ucu = bıçağın kökü (el: (0.5,-1.5,0))
 SAP_ARKA = np.array([0.5, -1.5, 0.55])    # sapın elin arkasında kalan ucu
 BICAK = np.array([0, 2.24, 0])            # bıçak kökünden ucuna (kolun +Y yönü)
+# Oyunda tırpan eldeyken beklerken ölçülen sol kol dönüşü (Torso'ya göre)
+SOL_BEKLEME = np.array([[0.5887, -0.6955, 0.4120], [-0.7696, -0.3263, 0.5489], [-0.2473, -0.6402, -0.7273]])
 YER = -3.0               # kök parçaya göre zemin yüksekliği
 
 def Rx(a): c, s = math.cos(a), math.sin(a); return np.array([[1, 0, 0], [0, c, -s], [0, s, c]])
@@ -37,6 +39,9 @@ def rodrigues(r):
     k = r / th
     K = np.array([[0, -k[2], k[1]], [k[2], 0, -k[0]], [-k[1], k[0], 0]])
     return np.eye(3) + math.sin(th) * K + (1 - math.cos(th)) * K @ K
+def donme_vektoru(R):
+    q = quat(R); v = q[:3]; n = np.linalg.norm(v)
+    return np.zeros(3) if n < 1e-9 else v / n * 2 * math.atan2(n, q[3])
 def quat(R):
     t = np.trace(R)
     if t > 0:
@@ -58,9 +63,11 @@ def quat(R):
 #   kdon: kolun kendi ekseni etrafında dönüşü; tırpanı elde çeviren budur
 #         (kol yatayken: 90 = sap kolun solunda yatay, 180 = sap dümdüz aşağı)
 # Bıçağın bulunduğu yön = kyon - 90 (kol sağa bakarken bıçak tam önde).
+# İlk ve son satır aynı duruştur (oyunda ölçülen bekleme: kol yukarıda, 18° arkaya yatık); kol dikken
+# kyon ile kdon birbirinin yerine geçtiği için başta "arkadan in", sonda "önden kalk" diye iki ayrı yazılır.
 # sol / solyan: sol kolun öne ve yana açılması (derece)
 ANAHTAR = [
-    dict(t=0.00, ad="Bel",    dur=1, egil=0,  yan=0, cok=0.00, geri=0.0,  diz=0,   dinlen=1, kyon=0,   kkalk=180, kdon=0,   sol=0,  solyan=0),
+    dict(t=0.00, ad="Bel",    dur=1, egil=0,  yan=0, cok=0.00, geri=0.0,  diz=0,   dinlen=1, kyon=180, kkalk=162, kdon=180,  sol=0,  solyan=0),
     dict(t=0.30, ad="Geri",   dur=0, egil=16, yan=0, cok=0.45, geri=0.1,  diz=0.3, dinlen=0, kyon=165, kkalk=100, kdon=118, sol=30, solyan=14),
     dict(t=0.42, ad="Savur",  dur=0, egil=32, yan=3, cok=0.90, geri=0.0,  diz=0.9, dinlen=0, kyon=135, kkalk=92,  kdon=130, sol=22, solyan=18),
     dict(t=0.50, ad="Kes",    dur=0, egil=38, yan=4, cok=1.00, geri=-0.1, diz=1,   dinlen=0, kyon=90,  kkalk=90,  kdon=133, sol=5,  solyan=20),
@@ -68,7 +75,7 @@ ANAHTAR = [
     dict(t=0.80, ad="Bekle",  dur=1, egil=37, yan=4, cok=1.03, geri=-0.1, diz=1,   dinlen=0, kyon=33,  kkalk=90,  kdon=131, sol=-22, solyan=18),
     dict(t=1.00, ad="",       dur=1, egil=35, yan=3, cok=1.00, geri=-0.1, diz=1,   dinlen=0, kyon=35,  kkalk=91,  kdon=130, sol=-20, solyan=16),
     dict(t=1.30, ad="Kalk",   dur=0, egil=12, yan=0, cok=0.30, geri=0.0,  diz=0.2, dinlen=0.5, kyon=30, kkalk=150, kdon=40,  sol=-5, solyan=6),
-    dict(t=1.60, ad="Bitis",  dur=1, egil=0,  yan=0, cok=0.00, geri=0.0,  diz=0,   dinlen=1, kyon=0,   kkalk=180, kdon=0,   sol=0,  solyan=0),
+    dict(t=1.60, ad="Bitis",  dur=1, egil=0,  yan=0, cok=0.00, geri=0.0,  diz=0,   dinlen=1, kyon=0,   kkalk=198, kdon=0,   sol=0,  solyan=0),
 ]
 ALANLAR = ["egil", "yan", "cok", "geri", "diz", "dinlen", "kyon", "kkalk", "kdon", "sol", "solyan"]
 
@@ -123,6 +130,7 @@ def kollar(p, Rt):
     """Sağ ve sol kolun gövde uzayındaki dönüşleri."""
     Rw = Ry(-math.radians(p["kyon"])) @ Rx(math.radians(p["kkalk"])) @ Ry(math.radians(p["kdon"]))
     RL = Rx(math.radians(p["sol"])) @ Rz(-math.radians(p["solyan"]))
+    RL = rodrigues(p["dinlen"] * donme_vektoru(SOL_BEKLEME @ RL.T)) @ RL     # beklerken oyundaki sol kol duruşu
     return Rt.T @ Rw, RL
 
 def tirpan(RR):
