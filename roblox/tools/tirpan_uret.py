@@ -62,22 +62,24 @@ def quat(R):
 #   kkalk: kolun kalkışı (0 = aşağı sarkık, 90 = yatay, 180 = dümdüz yukarı)
 #   kdon: kolun kendi ekseni etrafında dönüşü; tırpanı elde çeviren budur
 #         (kol yatayken: 90 = sap kolun solunda yatay, 180 = sap dümdüz aşağı)
+# yerde (0-1) / yuk: yerde = 1 iken kdon elle verilen değer yerine, bıçağın en alt noktası yerden tam
+#   "yuk" stud yukarıda kalacak şekilde her karede yeniden hesaplanır (bıçak yere yakın ama yere girmez)
 # Bıçağın bulunduğu yön = kyon - 90 (kol sağa bakarken bıçak tam önde).
 # İlk ve son satır aynı duruştur (oyunda ölçülen bekleme: kol yukarıda, 18° arkaya yatık); kol dikken
 # kyon ile kdon birbirinin yerine geçtiği için başta "arkadan in", sonda "önden kalk" diye iki ayrı yazılır.
 # sol / solyan: sol kolun öne ve yana açılması (derece)
 ANAHTAR = [
-    dict(t=0.00, ad="Bel",    dur=1, egil=0,  yan=0, cok=0.00, geri=0.0,  diz=0,   dinlen=1, kyon=180, kkalk=162, kdon=180,  sol=0,  solyan=0),
-    dict(t=0.30, ad="Geri",   dur=0, egil=16, yan=0, cok=0.45, geri=0.1,  diz=0.3, dinlen=0, kyon=165, kkalk=100, kdon=118, sol=30, solyan=14),
-    dict(t=0.42, ad="Savur",  dur=0, egil=32, yan=3, cok=0.90, geri=0.0,  diz=0.9, dinlen=0, kyon=135, kkalk=92,  kdon=130, sol=22, solyan=18),
-    dict(t=0.50, ad="Kes",    dur=0, egil=38, yan=4, cok=1.00, geri=-0.1, diz=1,   dinlen=0, kyon=90,  kkalk=90,  kdon=133, sol=5,  solyan=20),
-    dict(t=0.64, ad="",       dur=0, egil=40, yan=5, cok=1.05, geri=-0.1, diz=1,   dinlen=0, kyon=42,  kkalk=90,  kdon=133, sol=-18, solyan=20),
-    dict(t=0.80, ad="Bekle",  dur=1, egil=37, yan=4, cok=1.03, geri=-0.1, diz=1,   dinlen=0, kyon=33,  kkalk=90,  kdon=131, sol=-22, solyan=18),
-    dict(t=1.00, ad="",       dur=1, egil=35, yan=3, cok=1.00, geri=-0.1, diz=1,   dinlen=0, kyon=35,  kkalk=91,  kdon=130, sol=-20, solyan=16),
-    dict(t=1.30, ad="Kalk",   dur=0, egil=12, yan=0, cok=0.30, geri=0.0,  diz=0.2, dinlen=0.5, kyon=30, kkalk=150, kdon=40,  sol=-5, solyan=6),
-    dict(t=1.60, ad="Bitis",  dur=1, egil=0,  yan=0, cok=0.00, geri=0.0,  diz=0,   dinlen=1, kyon=0,   kkalk=198, kdon=0,   sol=0,  solyan=0),
+    dict(t=0.00, ad="Bel",    dur=1, egil=0,  yan=0, cok=0.00, geri=0.0,  diz=0,   dinlen=1, kyon=180, kkalk=162, kdon=180, yerde=0, yuk=0.5,  sol=0,  solyan=0),
+    dict(t=0.30, ad="Geri",   dur=0, egil=18, yan=0, cok=0.50, geri=0.1,  diz=0.3, dinlen=0, kyon=165, kkalk=100, kdon=118, yerde=0, yuk=0.5,  sol=30, solyan=14),
+    dict(t=0.42, ad="Savur",  dur=0, egil=40, yan=3, cok=1.00, geri=0.0,  diz=0.9, dinlen=0, kyon=135, kkalk=84,  kdon=122, yerde=1, yuk=0.45, sol=22, solyan=18),
+    dict(t=0.50, ad="Kes",    dur=0, egil=50, yan=4, cok=1.20, geri=-0.1, diz=1,   dinlen=0, kyon=90,  kkalk=80,  kdon=117, yerde=1, yuk=0.25, sol=5,  solyan=20),
+    dict(t=0.64, ad="",       dur=0, egil=52, yan=5, cok=1.22, geri=-0.1, diz=1,   dinlen=0, kyon=42,  kkalk=80,  kdon=117, yerde=1, yuk=0.25, sol=-18, solyan=20),
+    dict(t=0.80, ad="Bekle",  dur=1, egil=48, yan=4, cok=1.18, geri=-0.1, diz=1,   dinlen=0, kyon=33,  kkalk=80,  kdon=117, yerde=1, yuk=0.3,  sol=-22, solyan=18),
+    dict(t=1.00, ad="",       dur=1, egil=46, yan=3, cok=1.15, geri=-0.1, diz=1,   dinlen=0, kyon=35,  kkalk=81,  kdon=117, yerde=1, yuk=0.35, sol=-20, solyan=16),
+    dict(t=1.30, ad="Kalk",   dur=0, egil=12, yan=0, cok=0.30, geri=0.0,  diz=0.2, dinlen=0.5, kyon=30, kkalk=150, kdon=40, yerde=0, yuk=0.5,  sol=-5, solyan=6),
+    dict(t=1.60, ad="Bitis",  dur=1, egil=0,  yan=0, cok=0.00, geri=0.0,  diz=0,   dinlen=1, kyon=0,   kkalk=198, kdon=0,   yerde=0, yuk=0.5,  sol=0,  solyan=0),
 ]
-ALANLAR = ["egil", "yan", "cok", "geri", "diz", "dinlen", "kyon", "kkalk", "kdon", "sol", "solyan"]
+ALANLAR = ["egil", "yan", "cok", "geri", "diz", "dinlen", "kyon", "kkalk", "kdon", "yerde", "yuk", "sol", "solyan"]
 
 def vektor(k): return np.array([k[a] for a in ALANLAR], dtype=float)
 P = [vektor(k) for k in ANAHTAR]
@@ -92,7 +94,7 @@ def egri(t):
     h00, h10, h01, h11 = 2*s**3 - 3*s**2 + 1, s**3 - 2*s**2 + s, -2*s**3 + 3*s**2, s**3 - s**2
     v = h00 * P[i] + h10 * h * M[i] + h01 * P[i + 1] + h11 * h * M[i + 1]
     d = dict(zip(ALANLAR, v))
-    d["diz"] = min(max(d["diz"], 0), 1); d["don"] = 0.0
+    d["diz"] = min(max(d["diz"], 0), 1); d["don"] = 0.0; d["yerde"] = min(max(d["yerde"], 0), 1)
     d["dinlen"] = min(max(d["dinlen"], 0), 1)
     return d
 
@@ -133,6 +135,23 @@ def kollar(p, Rt):
     RL = rodrigues(p["dinlen"] * donme_vektoru(SOL_BEKLEME @ RL.T)) @ RL     # beklerken oyundaki sol kol duruşu
     return Rt.T @ Rw, RL
 
+BICAK_EN = 0.4   # bıçağın sap doğrultusundaki yarı genişliği
+def bicak_alt(p, Rt, pt):
+    """Bıçağın en alt köşesinin yerden yüksekliği."""
+    RR = kollar(p, Rt)[0]
+    kok = OMUZ["R"] + RR @ SAP_UCU
+    return min((pt + Rt @ (kok + RR @ (BICAK * a + np.array([0, 0, b]))))[1] for a in (0, 1) for b in (-BICAK_EN, BICAK_EN)) - YER
+
+def yere_oturt(p, Rt, pt):
+    """yerde > 0 ise kdon'u, bıçağın en alt noktası 'yuk' yüksekliğine gelecek şekilde ayarlar."""
+    if p["yerde"] <= 0: return
+    alt, ust = 90.0, 175.0                     # bu aralıkta kdon büyüdükçe bıçak alçalır
+    for _ in range(40):
+        orta = (alt + ust) / 2
+        if bicak_alt(dict(p, kdon=orta), Rt, pt) > p["yuk"]: alt = orta
+        else: ust = orta
+    p["kdon"] += p["yerde"] * ((alt + ust) / 2 - p["kdon"])
+
 def tirpan(RR):
     """Sapın arka ucu, bıçak kökü ve bıçak ucu (gövde uzayında)."""
     arka = OMUZ["R"] + RR @ SAP_ARKA
@@ -162,6 +181,7 @@ def uret():
     for t in zamanlar:
         p = egri(t)
         Rt, pt = govde(p)
+        yere_oturt(p, Rt, pt)
         RR, RL = kollar(p, Rt)
         arka, kok, uc = tirpan(RR)
         dunya = lambda q: pt + Rt @ q
@@ -172,8 +192,9 @@ def uret():
         if yakin < en_yakin[0]: en_yakin = (yakin, t)
         if t in anahtar_t:
             b = Rt @ RR @ np.array([0, 1.0, 0])
-            print("t=%.2f %-6s bıçak kökü yerden %5.2f, ucu yerden %5.2f, bıçağın yönü %4.0f° (0 ileri, - sol), gövdeye uzaklık %.2f" % (
-                t, anahtar_t[t], dunya(kok)[1] - YER, dunya(uc)[1] - YER, math.degrees(math.atan2(b[0], -b[2])), yakin))
+            yatik = abs((Rt @ RR @ np.array([1.0, 0, 0]))[1])
+            print("t=%.2f %-6s bıçağın en altı yerden %5.2f, yatıklığı %.2f (1 = tam yatık), yönü %4.0f° (0 ileri, - sol), gövdeye uzaklık %.2f" % (
+                t, anahtar_t[t], bicak_alt(p, Rt, pt), yatik, math.degrees(math.atan2(b[0], -b[2])), yakin))
         Rh, ph = kafa(p, Rt, pt, dunya(uc))
         par = {"Torso": (Rt, pt), "Head": (Rh, ph),
                "Right Arm": (RR, OMUZ["R"] + RR @ KOL_MERKEZ["R"]), "Left Arm": (RL, OMUZ["L"] + RL @ KOL_MERKEZ["L"])}
