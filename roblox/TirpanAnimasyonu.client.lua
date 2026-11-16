@@ -8,8 +8,9 @@
 	Animasyonu "Publish to Roblox" ile yükledikten sonra çıkan sayıyı ANIM_ID'ye yaz.
 ]]
 
-local ANIM_ID = "rbxassetid://0" -- <-- yayınlanan animasyonun ID'si buraya
+local ANIM_ID = "rbxassetid://139680876608365" -- <-- yayınlanan animasyonun ID'si buraya
 local HIZ = 1                    -- 1 = normal hız; tırpanın SallamaSure'sine göre ayarlanır
+local ANIM_UZUNLUK = 1.6         -- saniye; TirpanBicme animasyonunun uzunluğu
 local BITIS_GECIS = 0.3          -- saniye; vuruştan sonra kolun eski duruşa yumuşakça dönme süresi
 
 local Players = game:GetService("Players")
@@ -33,7 +34,9 @@ local function karakterHazir(karakter)
 	local humanoid = karakter:WaitForChild("Humanoid")
 	local animator = humanoid:WaitForChild("Animator")
 	track = animator:LoadAnimation(anim)
-	track.Priority = Enum.AnimationPriority.Action
+	-- Oyundaki dururken duruş animasyonu (IdleAnimation) Action önceliğinde; aynı öncelikte
+	-- ikisi yarı yarıya karışır ve tırpan yere inmez. Bu yüzden bir üst öncelik.
+	track.Priority = Enum.AnimationPriority.Action2
 end
 
 --[[
@@ -134,13 +137,15 @@ local function salla(alet)
 	-- Animasyonu tırpanın sallama süresine sığdır (SallamaSure yoksa normal hız)
 	local sure = alet:GetAttribute("SallamaSure")
 	local hiz = HIZ
-	if sure and sure > 0 and track.Length > 0 then
-		hiz = track.Length / sure
+	-- Animasyon henüz inmediyse Length 0 gelir; o zaman bilinen uzunluğu kullan
+	local uzunluk = track.Length > 0 and track.Length or ANIM_UZUNLUK
+	if sure and sure > 0 then
+		hiz = uzunluk / sure
 	end
 	track:Play(0.1, 1, hiz)
 	-- Bitişte el bir anda eski yerine ışınlanmasın: sona doğru yumuşakça
 	-- dururken duruşuna geri çek (kol tırpanı eski hâline çeker, uç yine aşağı döner)
-	local sure2 = track.Length / hiz
+	local sure2 = uzunluk / hiz
 	kesmeTara(alet, sure2) -- animasyon boyunca bıçak hangi samana değerse o kesilir
 	local benimTrack = track
 	task.delay(math.max(0, sure2 - BITIS_GECIS), function()
