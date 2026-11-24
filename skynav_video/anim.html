@@ -1,0 +1,318 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>html,body{margin:0;background:#000}canvas{display:block}</style>
+</head><body>
+<canvas id="c" width="1080" height="1920"></canvas>
+<script>
+// SkyNav tanıtım Shorts'ları — RS Animasyon karakterleriyle (kare "noob" tarzı). render(t) her kareyi çizer.
+const W = 1080, H = 1920, GROUND = 1500;
+const cv = document.getElementById('c'), x = cv.getContext('2d');
+const VID = (location.hash || '#1').slice(1);
+const IMG = {};
+for (const n of ['garden', 'sky', 'icon']) { IMG[n] = new Image(); IMG[n].src = n + '.png'; }
+
+// ── yardımcılar ──────────────────────────────────────────────────────────
+const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, k) => a + (b - a) * k;
+const ease = k => k < .5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+const easeOut = k => 1 - Math.pow(1 - k, 3);
+const back = k => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(k - 1, 3) + c1 * Math.pow(k - 1, 2); };
+const seg = (t, a, b) => clamp((t - a) / (b - a));
+function rnd(i) { const s = Math.sin(i * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); }
+function hex(c) { if (c.startsWith('rgb')) return c.match(/\d+/g).slice(0, 3).map(Number); const n = parseInt(c.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; }
+function shade(c, f) { const [r, g, b] = hex(c); const m = v => Math.round(clamp(f >= 1 ? v + (255 - v) * (f - 1) : v * f, 0, 255)); return `rgb(${m(r)},${m(g)},${m(b)})`; }
+function mix(c1, c2, k) { const a = hex(c1), b = hex(c2); return `rgb(${a.map((v, i) => Math.round(lerp(v, b[i], k))).join(',')})`; }
+function rr(px, py, w, h, r) { x.beginPath(); x.moveTo(px + r, py); x.arcTo(px + w, py, px + w, py + h, r); x.arcTo(px + w, py + h, px, py + h, r); x.arcTo(px, py + h, px, py, r); x.arcTo(px, py, px + w, py, r); x.closePath(); }
+
+// Kutu (sahte 3B): ön yüz + sağ yan + üst yüz
+function box(px, py, w, h, col, d) {
+  x.fillStyle = shade(col, .72); x.beginPath(); x.moveTo(px + w, py); x.lineTo(px + w + d, py - d); x.lineTo(px + w + d, py + h - d); x.lineTo(px + w, py + h); x.fill();
+  x.fillStyle = shade(col, 1.18); x.beginPath(); x.moveTo(px, py); x.lineTo(px + d, py - d); x.lineTo(px + w + d, py - d); x.lineTo(px + w, py); x.fill();
+  x.fillStyle = col; x.fillRect(px, py, w, h);
+}
+
+// ── karakterler ──────────────────────────────────────────────────────────
+const SKIN = '#F5CD30';
+const CH = {
+  sen:  { shirt: '#0D69AC', pants: '#4B974B' },
+  mert: { shirt: '#2ECC71', pants: '#2C3E50', cap: '#111111' },
+  anne: { shirt: '#E05A8A', pants: '#5A3D8A', hair: '#6B3E1E' },
+};
+// p: {x, y(zemin), u, armL, armR (derece, 0=aşağı, + = dışa/yukarı), legL, legR, rot (tüm gövde, derece), face, blush, sweat, tremble, holdPhone}
+function noob(who, p) {
+  const c = CH[who], u = p.u || 62, d = u * .22;
+  x.save();
+  let px = p.x + (p.tremble ? Math.sin(p.t * 95) * 5 : 0);
+  x.translate(px, p.y);
+  if (p.rot) { x.translate(0, -2 * u); x.rotate(p.rot * Math.PI / 180); x.translate(0, 2 * u); }
+  if (p.scaleX) x.scale(p.scaleX, 1);
+  // gölge
+  x.save(); x.globalAlpha = .22; x.fillStyle = '#000'; x.beginPath(); x.ellipse(0, 4, u * 2.1, u * .32, 0, 0, Math.PI * 2); x.fill(); x.restore();
+  const limb = (cx, cy, ang, w, h, col) => { x.save(); x.translate(cx, cy); x.rotate(ang * Math.PI / 180); box(-w / 2, 0, w, h, col, d); x.restore(); };
+  // anne: arka saç (omuzlara kadar)
+  if (c.hair) { x.fillStyle = shade(c.hair, .85); rr(-u * .78, -4 * u - 1.25 * u, u * 1.56, u * 2.05, u * .2); x.fill(); }
+  limb(-u * .5, -2 * u, p.legL || 0, u, 2 * u, c.pants);
+  limb(u * .5, -2 * u, -(p.legR || 0), u, 2 * u, c.pants);
+  box(-u, -4 * u, 2 * u, 2 * u, c.shirt, d);
+  limb(-u * 1.5, -4 * u, p.armL || 0, u, 2 * u, SKIN);
+  limb(u * 1.5, -4 * u, -(p.armR || 0), u, 2 * u, SKIN);
+  // telefon (sağ elde)
+  if (p.holdPhone) {
+    const a = -(p.armR || 0) * Math.PI / 180, hx = u * 1.5 + Math.sin(-a) * 2 * u * -1, hy = -4 * u + Math.cos(a) * 2 * u;
+    x.save(); x.translate(u * 1.5 - Math.sin(a) * 2 * u, -4 * u + Math.cos(a) * 2 * u); x.rotate(a * .3);
+    x.fillStyle = '#111'; rr(-u * .38, -u * .7, u * .76, u * 1.25, u * .12); x.fill();
+    x.fillStyle = p.phoneGlow || '#7FC8FF'; rr(-u * .3, -u * .62, u * .6, u * 1.08, u * .08); x.fill(); x.restore();
+  }
+  // kafa
+  const hw = u * 1.3, hh = u * 1.25, hx0 = -hw / 2, hy0 = -4 * u - hh - u * .02;
+  x.fillStyle = shade(SKIN, .72); x.beginPath(); x.moveTo(hx0 + hw, hy0 + 6); x.lineTo(hx0 + hw + d, hy0 - d + 6); x.lineTo(hx0 + hw + d, hy0 + hh - d); x.lineTo(hx0 + hw, hy0 + hh); x.fill();
+  x.fillStyle = SKIN; rr(hx0, hy0, hw, hh, u * .18); x.fill();
+  x.strokeStyle = 'rgba(0,0,0,.35)'; x.lineWidth = 3; x.stroke();
+  // saç / şapka
+  if (c.hair) { x.fillStyle = c.hair; rr(hx0 - u * .06, hy0 - u * .08, hw + u * .12, hh * .32, u * .18); x.fill(); x.fillRect(hx0 - u * .08, hy0 + hh * .1, u * .22, hh * 1.05); x.fillRect(hx0 + hw - u * .14, hy0 + hh * .1, u * .22, hh * 1.05); }
+  if (c.cap) { x.fillStyle = c.cap; rr(hx0 - u * .04, hy0 - u * .14, hw + u * .08, hh * .36, u * .2); x.fill(); x.fillStyle = shade(c.cap, 1.6); x.fillRect(hx0 - u * .14, hy0 + hh * .2, hw + u * .45, u * .14); }
+  // yüz
+  const f = p.face || 'smile', ex = u * .22, ey = hy0 + hh * .46;
+  x.fillStyle = '#111';
+  if (f === 'sleep') { x.fillRect(-ex - u * .09, ey, u * .18, u * .05); x.fillRect(ex - u * .09, ey, u * .18, u * .05); }
+  else if (f === 'dizzy') { x.font = `900 ${u * .32}px Inter`; x.textAlign = 'center'; x.fillText('x', -ex, ey + u * .14); x.fillText('x', ex, ey + u * .14); }
+  else { const eh = f === 'scared' ? u * .3 : u * .22; x.fillRect(-ex - u * .065, ey - eh / 2, u * .13, eh); x.fillRect(ex - u * .065, ey - eh / 2, u * .13, eh); }
+  if (f === 'angry') { x.lineWidth = u * .06; x.strokeStyle = '#111'; x.beginPath(); x.moveTo(-ex - u * .13, ey - u * .22); x.lineTo(-ex + u * .1, ey - u * .14); x.moveTo(ex + u * .13, ey - u * .22); x.lineTo(ex - u * .1, ey - u * .14); x.stroke(); }
+  x.lineWidth = u * .055; x.strokeStyle = '#111'; x.lineCap = 'round'; x.beginPath();
+  const my = hy0 + hh * .74;
+  if (f === 'happy' || f === 'smile') { x.moveTo(-u * .2, my - 2); x.quadraticCurveTo(0, my + (f === 'happy' ? u * .16 : u * .07), u * .2, my - 2); }
+  else if (f === 'smirk') { x.moveTo(-u * .18, my + 2); x.quadraticCurveTo(u * .05, my + u * .04, u * .22, my - u * .08); }
+  else if (f === 'scared') { x.ellipse(0, my, u * .09, u * .11, 0, 0, Math.PI * 2); }
+  else if (f === 'angry') { x.moveTo(-u * .18, my + u * .04); x.quadraticCurveTo(0, my - u * .08, u * .18, my + u * .04); }
+  else { x.moveTo(-u * .18, my); x.lineTo(u * .18, my); }
+  x.stroke(); x.lineCap = 'butt';
+  if (p.blush) { x.fillStyle = `rgba(255,90,110,${.45 * p.blush})`; x.beginPath(); x.ellipse(-u * .42, my - u * .08, u * .13, u * .07, 0, 0, Math.PI * 2); x.ellipse(u * .42, my - u * .08, u * .13, u * .07, 0, 0, Math.PI * 2); x.fill(); }
+  if (p.sweat) { const k = (p.t * 1.6) % 1; x.fillStyle = '#7FD3FF'; const sx = hw * .55, sy = hy0 + hh * .15 + k * u * .7; x.beginPath(); x.moveTo(sx, sy - u * .18); x.quadraticCurveTo(sx + u * .12, sy, sx, sy + u * .06); x.quadraticCurveTo(sx - u * .12, sy, sx, sy - u * .18); x.fill(); }
+  x.restore();
+  return { headX: p.x, headTop: p.y + hy0 * 1 - (p.rot ? 0 : 0) };
+}
+const headTop = (p) => p.y - 4 * (p.u || 62) - 1.27 * (p.u || 62);
+
+// Yürüyüş: bacak ve kol salınımı
+function walkPose(t, on) { if (!on) return { legL: 0, legR: 0, armL: 0, armR: 0, bob: 0 }; const s = Math.sin(t * 11); return { legL: s * 26, legR: s * 26, armL: -s * 22, armR: -s * 22, bob: Math.abs(Math.cos(t * 11)) * 6 }; }
+
+// ── konuşma balonu ve dış ses ────────────────────────────────────────────
+function wrap(text, maxW, font) { x.font = font; const out = []; for (const para of text.split('\n')) { let line = ''; for (const w of para.split(' ')) { const tt = line ? line + ' ' + w : w; if (x.measureText(tt).width > maxW && line) { out.push(line); line = w; } else line = tt; } out.push(line); } return out; }
+function bubble(t, t0, t1, cxp, topY, text, opts = {}) {
+  if (t < t0 || t > t1) return;
+  const k = back(seg(t, t0, t0 + .22)), fade = 1 - seg(t, t1 - .15, t1);
+  const font = `800 ${opts.size || 46}px Inter`, lines = wrap(text, opts.maxW || 600, font), lh = (opts.size || 46) * 1.22;
+  let bw = 0; x.font = font; for (const l of lines) bw = Math.max(bw, x.measureText(l).width); bw += 64; const bh = lines.length * lh + 40;
+  let bx = clamp(cxp - bw / 2, 40, W - 40 - bw); const by = topY - 46 - bh;
+  x.save(); x.globalAlpha = fade; x.translate(cxp, topY - 30); x.scale(k, k); x.translate(-cxp, -(topY - 30));
+  x.shadowColor = 'rgba(0,0,0,.25)'; x.shadowBlur = 18; x.shadowOffsetY = 6;
+  x.fillStyle = '#fff'; rr(bx, by, bw, bh, 30); x.fill();
+  x.beginPath(); const tx = clamp(cxp, bx + 40, bx + bw - 40); x.moveTo(tx - 22, by + bh - 2); x.lineTo(tx + 4, topY - 10); x.lineTo(tx + 26, by + bh - 2); x.fill();
+  x.shadowColor = 'transparent'; x.fillStyle = '#141414'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  lines.forEach((l, i) => x.fillText(l, bx + bw / 2, by + 20 + lh * (i + .5)));
+  x.restore();
+}
+function narr(t, t0, t1, text, y = 250, col = '#fff') {
+  if (t < t0 || t > t1) return;
+  const k = easeOut(seg(t, t0, t0 + .25)), fade = 1 - seg(t, t1 - .2, t1);
+  const font = '900 66px Inter', lines = wrap(text, 940, font);
+  x.save(); x.globalAlpha = fade; x.font = font; x.textAlign = 'center'; x.textBaseline = 'middle';
+  lines.forEach((l, i) => { const yy = y + i * 80 + (1 - k) * 30; x.lineWidth = 14; x.strokeStyle = '#000'; x.lineJoin = 'round'; x.strokeText(l, W / 2, yy); x.fillStyle = col; x.fillText(l, W / 2, yy); });
+  x.restore();
+}
+
+// ── efektler ─────────────────────────────────────────────────────────────
+function confetti(t, t0, ox, oy, n = 70) {
+  const dt = t - t0; if (dt < 0 || dt > 2.6) return;
+  const cols = ['#FFD23F', '#EE4266', '#3BCEAC', '#0EAD69', '#540D6E', '#4CC9F0'];
+  for (let i = 0; i < n; i++) { const a = rnd(i) * Math.PI * 2, v = 500 + rnd(i + 9) * 700; const px = ox + Math.cos(a) * v * dt * .7, py = oy - Math.abs(Math.sin(a)) * v * dt + 900 * dt * dt;
+    x.save(); x.globalAlpha = 1 - seg(dt, 1.8, 2.6); x.translate(px, py); x.rotate(dt * 8 + i); x.fillStyle = cols[i % 6]; x.fillRect(-9, -5, 18, 10); x.restore(); }
+}
+function zzz(t, px, py) { for (let i = 0; i < 3; i++) { const k = ((t * .7) + i / 3) % 1; x.save(); x.globalAlpha = Math.sin(k * Math.PI); x.font = `900 ${40 + i * 14}px Inter`; x.fillStyle = '#fff'; x.strokeStyle = '#000'; x.lineWidth = 6; x.strokeText(i % 2 ? 'Z' : 'z', px + k * 70 + i * 10, py - k * 160); x.fillText(i % 2 ? 'Z' : 'z', px + k * 70 + i * 10, py - k * 160); x.restore(); } }
+function stars(t, n = 140, alpha = 1, yMax = 1250) { for (let i = 0; i < n; i++) { const sx = rnd(i) * W, sy = rnd(i + 500) * yMax, r = .8 + rnd(i + 900) * 2.4; x.globalAlpha = alpha * (.45 + .55 * Math.abs(Math.sin(t * (1 + rnd(i + 3) * 2) + i))); x.fillStyle = '#fff'; x.beginPath(); x.arc(sx, sy, r, 0, Math.PI * 2); x.fill(); } x.globalAlpha = 1; }
+function moon(px, py, r) { x.save(); x.shadowColor = 'rgba(255,250,220,.8)'; x.shadowBlur = 60; x.fillStyle = '#F4F1E1'; x.beginPath(); x.arc(px, py, r, 0, Math.PI * 2); x.fill(); x.shadowBlur = 0; x.fillStyle = 'rgba(160,160,150,.35)'; for (const [a, b, c] of [[-.3, -.2, .22], [.25, .1, .18], [-.05, .35, .14], [.35, -.35, .1]]) { x.beginPath(); x.arc(px + a * r, py + b * r, c * r, 0, Math.PI * 2); x.fill(); } x.restore(); }
+function sparkle(px, py, s, a) { x.save(); x.globalAlpha = a; x.fillStyle = '#fff'; x.translate(px, py); x.beginPath(); for (let i = 0; i < 4; i++) { x.rotate(Math.PI / 2); x.moveTo(0, 0); x.quadraticCurveTo(s * .12, s * .12, 0, s); x.quadraticCurveTo(-s * .12, s * .12, 0, 0); } x.fill(); x.restore(); }
+function sky(top, bot) { const g = x.createLinearGradient(0, 0, 0, GROUND); g.addColorStop(0, top); g.addColorStop(1, bot); x.fillStyle = g; x.fillRect(0, 0, W, GROUND + 10); }
+
+// Telefon yakın çekimi: kaydırılan gerçek uygulama ekranı + vurgulu kutu
+function phone(t, t0, t1, img, scrollFrom, scrollTo, scrollT0, scrollT1, hl) {
+  if (t < t0 || t > t1) return;
+  const kin = easeOut(seg(t, t0, t0 + .45)), kout = seg(t, t1 - .3, t1);
+  const s = lerp(.25, 1, kin) * (1 - kout * .2), alpha = 1 - kout;
+  const fw = 760, fh = 1480, cx = W / 2, cy = 1120;
+  x.save(); x.globalAlpha = alpha; x.fillStyle = 'rgba(8,14,30,.55)'; x.fillRect(0, 0, W, H);
+  x.translate(cx, cy); x.scale(s, s); x.rotate((1 - kin) * -.25);
+  x.shadowColor = 'rgba(0,0,0,.5)'; x.shadowBlur = 50; x.fillStyle = '#0d0f14'; rr(-fw / 2, -fh / 2, fw, fh, 80); x.fill(); x.shadowBlur = 0;
+  const sw = 700, sh = 1400, sx = -sw / 2, sy = -sh / 2 + 10;
+  x.save(); rr(sx, sy, sw, sh, 56); x.clip(); x.fillStyle = '#F5F9FD'; x.fillRect(sx, sy, sw, sh);
+  const sc = sw / img.width, off = lerp(scrollFrom, scrollTo, ease(seg(t, scrollT0, scrollT1)));
+  if (img.complete && img.width) x.drawImage(img, 0, off, img.width, sh / sc, sx, sy, sw, sh);
+  if (hl) for (const h of hl) { if (t < h.t0) continue; const p = .5 + .5 * Math.sin((t - h.t0) * 7); const a = easeOut(seg(t, h.t0, h.t0 + .3));
+    x.strokeStyle = `rgba(255,176,32,${a})`; x.lineWidth = 10 + p * 4; x.shadowColor = 'rgba(255,176,32,.9)'; x.shadowBlur = 24 * a;
+    rr(sx + h.x0 * sc - 6, sy + (h.y0 - off) * sc - 6, (h.x1 - h.x0) * sc + 12, (h.y1 - h.y0) * sc + 12, 26); x.stroke(); x.shadowBlur = 0; }
+  x.restore();
+  x.fillStyle = '#0d0f14'; rr(-90, -fh / 2 + 22, 180, 34, 17); x.fill();
+  x.restore();
+}
+
+// Kapanış kartı
+function endCard(t, t0, question, who2) {
+  if (t < t0) return;
+  const k = easeOut(seg(t, t0, t0 + .5));
+  const g = x.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#0B1330'); g.addColorStop(1, '#2C3C78'); x.globalAlpha = k; x.fillStyle = g; x.fillRect(0, 0, W, H); stars(t, 90, .8, H);
+  x.save(); x.translate(W / 2, 470); const s = back(seg(t, t0 + .1, t0 + .6)); x.scale(s, s);
+  x.save(); rr(-130, -130, 260, 260, 60); x.clip(); if (IMG.icon.complete) x.drawImage(IMG.icon, -130, -130, 260, 260); x.restore(); x.restore();
+  x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillStyle = '#fff'; x.font = '900 118px Inter'; x.fillText('SkyNav', W / 2, 720);
+  x.fillStyle = '#C9D6F5'; x.font = '700 46px Inter'; x.fillText('Gökyüzünü gerçekten gör', W / 2, 805);
+  // soru kutusu
+  const qk = back(seg(t, t0 + .5, t0 + .9));
+  x.save(); x.translate(W / 2, 1010); x.scale(qk, qk);
+  const lines = wrap(question, 820, '900 58px Inter'); const bh = lines.length * 72 + 70;
+  x.fillStyle = '#FFD23F'; rr(-460, -bh / 2, 920, bh, 40); x.fill(); x.fillStyle = '#141414'; x.font = '900 58px Inter';
+  lines.forEach((l, i) => x.fillText(l, 0, -bh / 2 + 35 + 72 * (i + .5))); x.restore();
+  x.fillStyle = '#fff'; x.font = '800 50px Inter'; x.globalAlpha = k * clamp((t - t0 - 1) * 2); x.fillText('Yorumlara yaz!', W / 2, 1010 + 170);
+  x.globalAlpha = k; x.fillStyle = '#8FA3D6'; x.font = '700 38px Inter'; x.fillText('Yakında Google Play\'de', W / 2, 1300);
+  const wave = Math.sin(t * 8) * 30 + 140;
+  noob('sen', { t, x: 340, y: 1760, u: 50, armR: wave, face: 'happy' });
+  noob(who2, { t, x: 740, y: 1760, u: 50, armL: wave, face: who2 === 'mert' ? 'smirk' : 'happy' });
+  x.globalAlpha = 1;
+}
+
+// ── VİDEO 1: Havucum donacak mı?! ────────────────────────────────────────
+const V1 = { dur: 36, sfx: [
+  [0.2, 'music'], [1.0, 'boing'], [1.05, 'pop'], [5.0, 'step'], [6.6, 'pop'], [7.5, 'shiver'], [10.2, 'pop'], [12.0, 'whoosh'], [13.2, 'ding'], [15.6, 'swipe'], [17.4, 'ding'],
+  [19.2, 'whoosh'], [20.6, 'thump'], [21.0, 'night'], [22.2, 'sparkle'], [23.2, 'pop'], [25.0, 'spin'], [25.9, 'thud'], [26.6, 'swipe'], [27.2, 'boing'], [27.25, 'confetti'], [30.6, 'whoosh'], [31.4, 'pop'] ] };
+function tod1(t) { // 0 gün, 1 akşam, 2 gece, 3 sabah
+  if (t < 19.5) return ['#6EC1FF', '#CFEFFF', 0];
+  if (t < 21) { const k = seg(t, 19.5, 21); return [mix('#FF8A5B', '#0B1330', k), mix('#FFD29A', '#2C3C78', k), k]; }
+  if (t < 26) return ['#0B1330', '#2C3C78', 1];
+  const k = seg(t, 26, 27.2); return [mix('#0B1330', '#7CC4FF', k), mix('#2C3C78', '#FFE6B0', k), 1 - k];
+}
+function carrot(px, py, frost, wiggle) {
+  x.save(); x.translate(px, py); x.rotate(Math.sin(wiggle) * .03);
+  x.fillStyle = '#3FA34D'; for (let i = -2; i <= 2; i++) { x.save(); x.rotate(i * .28); rr(-16, -330, 32, 190, 16); x.fill(); x.restore(); }
+  const g = x.createLinearGradient(-120, 0, 120, 0); g.addColorStop(0, '#FF9F1C'); g.addColorStop(.6, '#F77F00'); g.addColorStop(1, '#D35400'); x.fillStyle = g;
+  x.beginPath(); x.moveTo(-125, -160); x.quadraticCurveTo(0, -200, 125, -160); x.lineTo(60, 60); x.quadraticCurveTo(0, 90, -60, 60); x.closePath(); x.fill();
+  x.strokeStyle = 'rgba(120,50,0,.35)'; x.lineWidth = 6; for (const yy of [-110, -60, -10]) { x.beginPath(); x.moveTo(-70, yy); x.lineTo(-20, yy + 6); x.stroke(); x.beginPath(); x.moveTo(40, yy + 20); x.lineTo(85, yy + 26); x.stroke(); }
+  if (frost > 0) { x.globalAlpha = frost * .7; x.fillStyle = '#E6F6FF'; x.fill(); }
+  x.restore();
+}
+function goldTree(px, py, frost) {
+  x.fillStyle = '#7A4A23'; x.fillRect(px - 22, py - 260, 44, 260);
+  const leaf = mix('#2F9E44', '#CFE9FF', frost * .85);
+  x.fillStyle = leaf; for (const [a, b, r] of [[0, -330, 130], [-95, -270, 95], [95, -270, 95], [0, -220, 110]]) { x.beginPath(); x.arc(px + a, py + b, r, 0, Math.PI * 2); x.fill(); }
+  for (let i = 0; i < 9; i++) { const fx = px + (rnd(i + 40) - .5) * 230, fy = py - 380 + rnd(i + 70) * 200; x.fillStyle = mix('#F7C531', '#BFE6FF', frost); x.beginPath(); x.arc(fx, fy, 20, 0, Math.PI * 2); x.fill(); x.fillStyle = 'rgba(255,255,255,.6)'; x.beginPath(); x.arc(fx - 6, fy - 6, 6, 0, Math.PI * 2); x.fill(); }
+}
+function render1(t) {
+  const [top, bot, night] = tod1(t);
+  sky(top, bot);
+  if (night > 0) stars(t, 120, night);
+  // güneş / ay
+  if (t < 20.5) { x.save(); x.globalAlpha = 1 - seg(t, 19.5, 20.5); x.fillStyle = '#FFE066'; x.shadowColor = '#FFE066'; x.shadowBlur = 80; x.beginPath(); x.arc(200, lerp(330, 900, seg(t, 19.2, 20.8)), 70, 0, Math.PI * 2); x.fill(); x.restore(); }
+  if (night > .3 && t < 26.8) { x.globalAlpha = clamp((night - .3) / .7); moon(860, 360, 70); x.globalAlpha = 1; }
+  // zemin
+  const frost = seg(t, 21.8, 23.2) * (1 - seg(t, 26.4, 27.6));
+  x.fillStyle = mix(mix('#5DBB4B', '#1E3D2A', night * .7), '#E8F4FF', frost * .55); x.fillRect(0, GROUND - 40, W, H);
+  x.fillStyle = mix('#7A5230', '#3A2818', night * .6); for (let i = 0; i < 3; i++) { rr(60, GROUND + 60 + i * 110, 520, 60, 30); x.fill(); }
+  // komşunun bahçesi (Mert): çit + altın ağaç
+  x.fillStyle = mix('#C08A50', '#4A3622', night * .7); for (let i = 0; i < 6; i++) x.fillRect(640 + i * 75, GROUND - 170, 30, 170); x.fillRect(630, GROUND - 140, 450, 24); x.fillRect(630, GROUND - 70, 450, 24);
+  goldTree(900, GROUND - 60, frost);
+  // havuç ve battaniye
+  carrot(330, GROUND + 20, 0, t * 2);
+  const blanketDown = seg(t, 20.2, 20.7) * (1 - seg(t, 26.4, 26.9));
+  if (blanketDown > 0) { x.save(); const by = lerp(-200, GROUND - 330, easeOut(blanketDown)); x.globalAlpha = Math.min(1, blanketDown * 3);
+    x.fillStyle = '#D63031'; rr(170, by, 320, 360, 40); x.fill(); x.fillStyle = 'rgba(255,255,255,.85)'; for (let i = 0; i < 4; i++) { x.fillRect(170 + i * 85 + 20, by, 22, 360); x.fillRect(170, by + i * 90 + 20, 320, 22); } x.restore(); }
+  // ayaz parıltıları
+  if (frost > 0) for (let i = 0; i < 26; i++) sparkle(rnd(i + 200) * W, GROUND - 30 + rnd(i + 300) * 400, 18 + rnd(i) * 20, frost * Math.abs(Math.sin(t * 3 + i)));
+  // karakterler
+  const senX = 130 + 0, mertIn = easeOut(seg(t, 5, 6.5));
+  const mertX = t < 21 ? lerp(1250, 760, mertIn) : 860;
+  const jump1 = t > 1 && t < 1.6 ? Math.sin(seg(t, 1, 1.6) * Math.PI) * 120 : 0;
+  const jump2 = t > 27.2 && t < 29.4 ? Math.abs(Math.sin(seg(t, 27.2, 29.4) * Math.PI * 3)) * 120 : 0;
+  const scared = t > 7.3 && t < 12;
+  const hasPhone = t > 10 && t < 19.5;
+  const senPose = { t, x: 560, y: GROUND - jump1 - jump2, u: 66, face: scared ? 'scared' : (t > 26 ? 'happy' : (t > 19 && t < 23 ? 'smile' : 'smile')), tremble: scared, sweat: scared,
+    armL: (jump1 || jump2) ? 160 : 0, armR: (jump1 || jump2) ? 160 : (hasPhone ? 120 : (t > 19.9 && t < 20.4 ? 150 : 0)), holdPhone: hasPhone };
+  if (t > 30.5) {} else noob('sen', senPose);
+  const mw = walkPose(t, t > 5 && t < 6.5);
+  let mPose = { t, x: mertX, y: GROUND - (t > 21 ? 60 : 0) - mw.bob, u: 62, face: t < 21 ? 'smirk' : 'angry', ...mw };
+  if (t > 6.5 && t < 9.7) mPose.armR = 95 + Math.sin(t * 6) * 6; // işaret eder
+  if (t > 23 && t < 25) { mPose.armL = 150 + Math.sin(t * 18) * 20; mPose.armR = 150 - Math.sin(t * 18) * 20; }
+  if (t > 25 && t < 30.5) { const k = seg(t, 25, 25.9); mPose.rot = -easeOut(k) * 90; mPose.scaleX = Math.cos(k * Math.PI * 4) || .01; mPose.face = 'dizzy'; }
+  if (t < 30.5) noob('mert', mPose);
+  // konuşmalar ve dış ses
+  const senTop = GROUND - 66 * 5.3, mertTop = GROUND - 62 * 5.3;
+  narr(t, .3, 2.9, 'Dev havucun sonunda hazır!');
+  narr(t, 2.9, 5, 'Yarın pazara götüreceksin.');
+  bubble(t, 6.6, 9.7, mertX, mertTop, 'Ha ha! Bu gece don var. Havucun buz olacak!', { maxW: 560 });
+  narr(t, 7.6, 10, 'Gerçekten mi?!', 250, '#FFD23F');
+  bubble(t, 10.2, 12, 560, senTop, 'Bakalım...');
+  phone(t, 12, 19.4, IMG.garden, 0, 2650, 15.4, 16.6, [{ t0: 13.2, x0: 48, y0: 425, x1: 1122, y1: 1060 }, { t0: 17.2, x0: 48, y0: 3700, x1: 1122, y1: 3915 }]);
+  narr(t, 12.4, 15.4, 'SkyNav: Bu gece hafif don, −2°!', 190, '#FFD23F');
+  narr(t, 16.6, 19.3, 'Fidanlarını ört, diyor.', 190);
+  narr(t, 21, 23.2, 'Gece... Don geldi.');
+  bubble(t, 23.2, 25.2, 860, mertTop - 60, 'Bu haksızlık! Tekrar oynayalım!', { maxW: 520 });
+  narr(t, 27.2, 30.3, 'Havucun kurtuldu!', 250, '#FFD23F');
+  confetti(t, 27.25, 560, GROUND - 420);
+  endCard(t, 30.5, 'Sen olsan havucu nasıl korurdun?', 'mert');
+}
+
+// ── VİDEO 2: Annem yıldızlara takıldı ────────────────────────────────────
+const V2 = { dur: 38, sfx: [
+  [0.2, 'night'], [0.2, 'music'], [2.6, 'pop'], [4.8, 'step'], [6.2, 'pop'], [8.6, 'pop'], [9.6, 'whoosh'], [10.8, 'ding'], [13.6, 'pop'], [15.3, 'pop'], [17.0, 'swipe'], [17.4, 'taps'],
+  [19.2, 'whoosh'], [20.0, 'swipe'], [21.0, 'ding'], [22.8, 'meteor'], [23.5, 'meteor'], [24.1, 'meteor'], [23.0, 'boing'], [25.4, 'step'], [26.2, 'pop'], [28.6, 'pop'], [30.6, 'spin'], [31.5, 'thud'], [32.0, 'pop'], [33.4, 'snore'], [35.6, 'whoosh'], [36.4, 'pop'] ] };
+function render2(t) {
+  sky('#070C22', '#24346A');
+  stars(t, 170, 1, 1300);
+  moon(170, 300, 62);
+  // Jüpiter (parlak nokta)
+  const jx = 780, jy = 470; x.save(); x.shadowColor = '#FFE9A8'; x.shadowBlur = 50; x.fillStyle = '#FFF4D0'; x.beginPath(); x.arc(jx, jy, 13, 0, Math.PI * 2); x.fill(); x.restore(); sparkle(jx, jy, 46 + Math.sin(t * 4) * 8, .85);
+  // meteorlar
+  for (const [m0, sx0, sy0] of [[22.8, 900, 160], [23.5, 700, 90], [24.1, 1000, 300], [24.8, 820, 220]]) { const k = seg(t, m0, m0 + .7); if (k <= 0 || k >= 1) continue; const hx = sx0 - k * 600, hy = sy0 + k * 330;
+    const g = x.createLinearGradient(hx, hy, hx + 220, hy - 120); g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(1, 'rgba(255,255,255,0)'); x.strokeStyle = g; x.lineWidth = 6; x.globalAlpha = Math.sin(k * Math.PI); x.beginPath(); x.moveTo(hx, hy); x.lineTo(hx + 220, hy - 120); x.stroke(); x.globalAlpha = 1; }
+  // uçak (yanıp sönen ışık)
+  if (t > 25 && t < 31.5) { const px = lerp(-80, 1160, seg(t, 25, 31.5)), py = 560; x.fillStyle = 'rgba(190,200,225,.35)'; rr(px - 70, py - 9, 140, 18, 9); x.fill(); rr(px - 14, py - 40, 26, 80, 10); x.fill();
+    x.save(); x.shadowBlur = 30; if (Math.floor(t * 3) % 2 === 0) { x.shadowColor = '#FF3B3B'; x.fillStyle = '#FF4D4D'; x.beginPath(); x.arc(px - 70, py, 13, 0, Math.PI * 2); x.fill(); } if (Math.floor(t * 3 + 1) % 2 === 0) { x.shadowColor = '#fff'; x.fillStyle = '#fff'; x.beginPath(); x.arc(px + 70, py, 12, 0, Math.PI * 2); x.fill(); } x.restore(); }
+  // tepe ve ev
+  x.fillStyle = '#132447'; x.beginPath(); x.moveTo(0, GROUND - 120); x.quadraticCurveTo(540, GROUND - 260, W, GROUND - 120); x.lineTo(W, H); x.lineTo(0, H); x.fill();
+  x.fillStyle = '#1B3058'; x.fillRect(0, GROUND - 20, W, H);
+  x.fillStyle = '#0E1A33'; x.fillRect(40, GROUND - 360, 230, 340); x.beginPath(); x.moveTo(20, GROUND - 360); x.lineTo(155, GROUND - 470); x.lineTo(290, GROUND - 360); x.fill(); x.fillStyle = '#FFD86B'; x.fillRect(90, GROUND - 300, 60, 60); x.fillRect(180, GROUND - 300, 60, 60);
+  // karakterler
+  const anneIn = easeOut(seg(t, 4.8, 6)), anneX = lerp(-200, 330, anneIn);
+  const mertIn = easeOut(seg(t, 25.2, 26.2)), mertX = lerp(1250, 860, mertIn);
+  const senHas = t > 8.5 && t < 17, anneHas = t > 17 && t < 31.5;
+  const sleepy = t > 31.6 && t < 34.5;
+  const point = t > 1 && t < 5 && !senHas;
+  noob('sen', { t, x: 600, y: GROUND, u: 64, face: sleepy ? 'sleep' : (t > 13.5 && t < 16 ? 'smirk' : 'smile'), armR: point ? 165 : (senHas ? 120 : (t > 28.6 && t < 30.6 ? 95 : 0)), holdPhone: senHas, armL: 0, blush: 0 });
+  const aw = walkPose(t, t > 4.8 && t < 6);
+  const ajump = t > 22.9 && t < 25 ? Math.abs(Math.sin(seg(t, 22.9, 25) * Math.PI * 3)) * 90 : 0;
+  noob('anne', { t, x: anneX, y: GROUND - aw.bob - ajump, u: 60, face: (t > 15 && t < 17) || ajump ? 'happy' : 'smile', ...aw, armR: anneHas ? 120 + (t > 17.4 && t < 19 ? Math.sin(t * 40) * 8 : 0) : aw.armR, armL: ajump ? 160 : aw.armL, holdPhone: anneHas, blush: t > 15 && t < 17 ? 1 : 0 });
+  const mw = walkPose(t, t > 25.2 && t < 26.2);
+  let mp = { t, x: mertX, y: GROUND - mw.bob, u: 60, face: 'smirk', ...mw };
+  if (t > 26.2 && t < 28.6) mp.armR = 165;
+  if (t > 30.6) { const k = seg(t, 30.6, 31.5); mp.rot = -easeOut(k) * 90; mp.scaleX = Math.cos(k * Math.PI * 4) || .01; mp.face = 'dizzy'; }
+  if (t > 25 && t < 35.5) noob('mert', mp);
+  if (sleepy) zzz(t, 640, GROUND - 64 * 5.5);
+  const senTop = GROUND - 64 * 5.3, anneTop = GROUND - 60 * 5.3, mertTop = GROUND - 60 * 5.3;
+  narr(t, .3, 2.6, 'Gece. Gökyüzünde çok parlak bir yıldız var.');
+  bubble(t, 2.6, 5, 600, senTop, 'Bu yıldız neden bu kadar parlak?', { maxW: 520 });
+  bubble(t, 6.2, 8.4, anneX, anneTop, 'Bana da öğret.');
+  bubble(t, 8.6, 9.6, 600, senTop, 'Bak!');
+  phone(t, 9.6, 13.4, IMG.sky, 0, 0, 0, 1, [{ t0: 10.8, x0: 56, y0: 545, x1: 1122, y1: 715 }]);
+  narr(t, 10.2, 13.3, 'SkyNav: Jüpiter, çok parlak!', 190, '#FFD23F');
+  bubble(t, 13.6, 15.3, 600, senTop, 'O yıldız değil anne, Jüpiter!', { maxW: 520 });
+  bubble(t, 15.3, 17, anneX, anneTop, 'Aferin oğlum!');
+  narr(t, 17.2, 19.1, 'Anne telefonu kaptı...');
+  phone(t, 19.2, 22.7, IMG.sky, 0, 2480, 19.6, 20.6, [{ t0: 21.0, x0: 56, y0: 3050, x1: 1122, y1: 3240 }]);
+  narr(t, 19.4, 22.6, '14 Aralık: meteor yağmuru!', 190, '#FFD23F');
+  bubble(t, 26.2, 28.5, mertX, mertTop, 'Ben yıldızları ezbere bilirim! İşte bir yıldız!', { maxW: 520 });
+  bubble(t, 28.6, 30.5, 600, senTop, 'Mert... o bir uçak.');
+  bubble(t, 32, 34.6, anneX, anneTop, 'Beş dakika! Son meteordayım!', { maxW: 480 });
+  endCard(t, 35.5, 'Sen bu gece hangi gezegeni gördün?', 'anne');
+}
+
+window.VIDEO = VID === '2' ? V2 : V1;
+window.render = (t) => { x.setTransform(1, 0, 0, 1, 0, 0); x.globalAlpha = 1; x.clearRect(0, 0, W, H); (VID === '2' ? render2 : render1)(t); };
+window.ready = () => Object.values(IMG).every(i => i.complete && i.width > 0) && document.fonts.check('900 40px Inter');
+</script>
+</body></html>
