@@ -1,0 +1,89 @@
+# SkyNav Google Play paketi (.aab): aslan-cr/kilit (main) → yükleme anahtarıyla imzalı AAB → bu deponun Releases'ı.
+# Gerekli GitHub Secrets (Settings → Secrets and variables → Actions):
+#   SKYNAV_UPLOAD_JKS  = yükleme anahtarının base64 metni
+#   SKYNAV_UPLOAD_PASS = anahtar şifresi
+# Not: kilit deposundaki APK (güncelleyici) eskisi gibi kendi anahtarıyla imzalanır; burada yalnızca CI içinde yamalanır.
+name: SkyNav AAB (Google Play)
+on:
+  push:
+    branches: [ccr-75415aef-qqitct]
+    paths: ['.github/skynav-aab-trigger']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Anahtar kontrolü
+        env:
+          JKS: ${{ secrets.SKYNAV_UPLOAD_JKS }}
+          PASS: ${{ secrets.SKYNAV_UPLOAD_PASS }}
+        run: |
+          if [ -z "$JKS" ] || [ -z "$PASS" ]; then
+            echo "::error::SKYNAV_UPLOAD_JKS ve SKYNAV_UPLOAD_PASS gizli değişkenleri eksik (Settings → Secrets and variables → Actions)."
+            exit 1
+          fi
+          echo "$JKS" | base64 -d > "$RUNNER_TEMP/upload.jks"
+          keytool -list -keystore "$RUNNER_TEMP/upload.jks" -storepass "$PASS" -alias upload > /dev/null
+      - uses: actions/checkout@v4
+        with:
+          repository: aslan-cr/kilit
+          ref: main
+          path: kilit
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Android lisansları
+        run: yes | sdkmanager --licenses > /dev/null || true
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.35.7
+          cache: true
+      - name: Release imzasını yükleme anahtarına çevir (yalnızca bu derlemede)
+        working-directory: kilit/skynav
+        run: |
+          python3 - <<'PY'
+          p = 'android/app/build.gradle.kts'
+          s = open(p).read()
+          up = '''    signingConfigs {
+                  create("upload") {
+                      storeFile = file(System.getenv("SKYNAV_UPLOAD_JKS_PATH")!!)
+                      storePassword = System.getenv("SKYNAV_UPLOAD_PASS")
+                      keyAlias = "upload"
+                      keyPassword = System.getenv("SKYNAV_UPLOAD_PASS")
+                  }
+          '''
+          assert s.count('    signingConfigs {\n') == 1
+          s = s.replace('    signingConfigs {\n', up, 1)
+          assert s.count('signingConfig = signingConfigs.getByName("debug")') == 1
+          s = s.replace('signingConfig = signingConfigs.getByName("debug")', 'signingConfig = signingConfigs.getByName("upload")')
+          open(p, 'w').write(s)
+          PY
+          grep -n 'create("upload")\|getByName("upload")' android/app/build.gradle.kts
+      - name: AAB derle
+        working-directory: kilit/skynav
+        env:
+          SKYNAV_UPLOAD_JKS_PATH: ${{ runner.temp }}/upload.jks
+          SKYNAV_UPLOAD_PASS: ${{ secrets.SKYNAV_UPLOAD_PASS }}
+        run: |
+          flutter pub get
+          flutter build appbundle --release
+          ver=$(grep -m1 '^version:' pubspec.yaml | awk '{print $2}' | tr '+' '-')
+          mkdir -p out
+          cp build/app/outputs/bundle/release/app-release.aab "out/SkyNav-$ver.aab"
+          echo "İmza:"; keytool -printcert -jarfile "out/SkyNav-$ver.aab" | grep -m2 "Owner\|SHA256"
+          ls -la out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: skynav-aab
+          path: kilit/skynav/out/*.aab
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: skynav-aab-${{ github.run_number }}
+          name: SkyNav Google Play paketi (${{ github.run_number }})
+          target_commitish: ${{ github.sha }}
+          files: kilit/skynav/out/*.aab
